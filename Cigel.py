@@ -1,12 +1,27 @@
 import datetime
 import calendar
 import math
+import io
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
 
 # ════════════════════════════════════════════════════════════════
-# KONFIGURÁCIA GOOGLE SHEETS – DODÁVKY ŠTIEPKY (BC = Baňa Cigeľ)
+# NASTAVENIE STRÁNKY A DIZAJNU (Skrytie menu a pätky)
+# ════════════════════════════════════════════════════════════════
+st.set_page_config(page_title="Generátor reportov", page_icon="🏭", layout="centered")
+
+hide_streamlit_style = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+# ════════════════════════════════════════════════════════════════
+# KONFIGURÁCIA GOOGLE SHEETS
 # ════════════════════════════════════════════════════════════════
 DODAVKY_SHEET_ID = "1MB041dTwz-zfGg6u3wM1XpmrS_ynDe1J"
 
@@ -23,9 +38,6 @@ COL_JANKULA    = 4
 COL_PC_STAV    = 1
 RIADOK_PC_STAV_IDX = 36
 
-# ════════════════════════════════════════════════════════════════
-# KONFIGURÁCIA GOOGLE SHEETS – PREVÁDZKOVÝ ZÁZNAM
-# ════════════════════════════════════════════════════════════════
 PREVADZKA_SHEETS = {
     2: {
         "sheet_id":   "1FXmRJwlRr6N2u_aZzuzjnn0HHgNEBTem64B1phXl_NM",
@@ -49,9 +61,9 @@ MC_T_K6 = 4; MC_T_K7 = 23; MC_PRIETOK = 13
 DZ_K6 = 13; DZ_K7 = 30
 
 # ════════════════════════════════════════════════════════════════
-# POMOCNÉ FUNKCIE
+# POMOCNÉ FUNKCIE (Dáta a výpočty)
 # ════════════════════════════════════════════════════════════════
-@st.cache_data(ttl=600) # Cache na 10 minút, aby sa appka načítavala rýchlejšie
+@st.cache_data(ttl=600)
 def nacitaj_gs(sheet_id: str, gid: str) -> pd.DataFrame | None:
     url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
     try:
@@ -159,8 +171,15 @@ def vypocitaj_vydrz_zasoby(pociatocny_stav, spotreba_doteraz, aktualna_denna_spo
     return aktualny_datum + datetime.timedelta(days=dni), dni
 
 # ════════════════════════════════════════════════════════════════
-# GRAFY PRE STREAMLIT
+# POMOCNÉ FUNKCIE PRE GRAFY A STIAHNUTIE
 # ════════════════════════════════════════════════════════════════
+def graf_do_pamate(fig):
+    """Uloží graf do pamäte pre tlačidlo na stiahnutie."""
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', bbox_inches='tight', dpi=150)
+    buf.seek(0)
+    return buf
+
 def create_bar_chart(vyroba, priem_teplota, teplota_k6, teplota_k7):
     vyroba_num = float(vyroba.split()[0].replace(',', '.'))
     priem_teplota_num = float(priem_teplota.split()[0].replace(',', '.'))
@@ -202,17 +221,6 @@ def create_line_chart(values, chart_title, line_color):
 # ════════════════════════════════════════════════════════════════
 # STREAMLIT APLIKÁCIA
 # ════════════════════════════════════════════════════════════════
-st.set_page_config(page_title="Generátor reportov", page_icon="🏭", layout="centered")
-# --- SKRYTIE PREDVOLENÉHO STREAMLIT MENU A PÄTKY ---
-hide_streamlit_style = """
-<style>
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-header {visibility: hidden;}
-</style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-# ---------------------------------------------------
 st.title("🏭 Prevádzkový report - Cigeľ")
 st.write("Vyber dátum a vygeneruj report, ktorý si môžeš skopírovať do mailu.")
 
@@ -261,10 +269,10 @@ if st.button("🚀 Generuj report", type="primary"):
         # Formátovanie
         def fmt(val, jednotka=""): return str(round(val, 2)).replace('.', ',') + (f" {jednotka}" if jednotka else "")
 
-        # HTML Generovanie (Rovnaké ako predtým)
+        # HTML Generovanie (Opravené farby pre tmavý režim na mobile)
         def td_row(label, value, alt=False):
             bg = " style='background: #f8f9fa;'" if alt else ""
-            return f"<tr{bg}><td style='padding:10px;border-left:4px solid #8CC63F;'>{label}</td><td style='padding:10px;text-align:right;font-weight:bold;'>{value}</td></tr>"
+            return f"<tr{bg}><td style='padding:10px;border-left:4px solid #8CC63F; color:#2B2B2B;'>{label}</td><td style='padding:10px;text-align:right;font-weight:bold; color:#2B2B2B;'>{value}</td></tr>"
         
         html_table = f"""
         <table style='width:100%; border-collapse:collapse; font-family:sans-serif;'>
@@ -284,7 +292,7 @@ if st.button("🚀 Generuj report", type="primary"):
 
         def td_row_stiepka(label, value, alt=False):
             bg = " style='background:#f8f9fa;'" if alt else ""
-            return f"<tr{bg}><td style='padding:10px;border-left:4px solid #5A5A5A;'>{label}</td><td style='padding:10px;text-align:right;font-weight:bold;'>{value}</td></tr>"
+            return f"<tr{bg}><td style='padding:10px;border-left:4px solid #5A5A5A; color:#2B2B2B;'>{label}</td><td style='padding:10px;text-align:right;font-weight:bold; color:#2B2B2B;'>{value}</td></tr>"
 
         html_stiepka_info = f"""
         <table style='width:100%; border-collapse:collapse; font-family:sans-serif; border:1px solid #ddd;'>
@@ -304,24 +312,52 @@ if st.button("🚀 Generuj report", type="primary"):
 
     st.success("Report bol úspešne vygenerovaný! Skopíruj si ho nižšie.")
     st.divider()
-
-    # --- VÝSTUP PRE KOPÍROVANIE ---
-    st.markdown(f"Dobrý deň,\n\nZasielam Vám hodnoty z prevádzkového záznamu za deň {vybrany_datum.strftime('%d.%m.%Y')}:")
     
+    # --- PREDMET E-MAILU ---
+    st.markdown("**Predmet e-mailu (skopíruj text nižšie):**")
+    st.code(f"Prevádzkový záznam - hodnoty za {vybrany_datum.strftime('%d.%m.%Y')}", language="text")
+    st.write("")
+
+    # --- TELO E-MAILU ---
+    st.markdown(f"Dobrý deň,\n\nZasielam Vám hodnoty z prevádzkového záznamu za deň {vybrany_datum.strftime('%d.%m.%Y')}:")
     st.markdown(html_table, unsafe_allow_html=True)
     st.markdown(html_stiepka_info, unsafe_allow_html=True)
 
+    # --- GRAFY A TLAČIDLÁ NA STIAHNUTIE ---
     st.markdown("### Prevádzkové hodnoty")
-    st.pyplot(create_bar_chart(fmt(prev["vyroba_val"], "MWh"), fmt(prev["priem_teplota_val"], "°C"), 
-                               fmt(prev["teplota_k6_val"], "°C"), fmt(prev["teplota_k7_val"], "°C")))
+    fig_prevadzka = create_bar_chart(fmt(prev["vyroba_val"], "MWh"), fmt(prev["priem_teplota_val"], "°C"), 
+                                     fmt(prev["teplota_k6_val"], "°C"), fmt(prev["teplota_k7_val"], "°C"))
+    st.pyplot(fig_prevadzka)
+    st.download_button(
+        label="💾 Stiahnuť graf prevádzkových hodnôt",
+        data=graf_do_pamate(fig_prevadzka),
+        file_name=f"Prevadzkove_hodnoty_{vybrany_datum.strftime('%d_%m_%Y')}.png",
+        mime="image/png"
+    )
 
     st.markdown("### Výkon kotla K6")
-    st.pyplot(create_line_chart(hours_data_k6, "Výkon kotla K6", "#8CC63F"))
+    fig_k6 = create_line_chart(hours_data_k6, "Výkon kotla K6", "#8CC63F")
+    st.pyplot(fig_k6)
+    st.download_button(
+        label="💾 Stiahnuť graf K6",
+        data=graf_do_pamate(fig_k6),
+        file_name=f"Vykon_K6_{vybrany_datum.strftime('%d_%m_%Y')}.png",
+        mime="image/png"
+    )
 
     st.markdown("### Výkon kotla K7")
-    st.pyplot(create_line_chart(hours_data_k7, "Výkon kotla K7", "#2B2B2B"))
+    fig_k7 = create_line_chart(hours_data_k7, "Výkon kotla K7", "#2B2B2B")
+    st.pyplot(fig_k7)
+    st.download_button(
+        label="💾 Stiahnuť graf K7",
+        data=graf_do_pamate(fig_k7),
+        file_name=f"Vykon_K7_{vybrany_datum.strftime('%d_%m_%Y')}.png",
+        mime="image/png"
+    )
 
+    # --- ZÁVER E-MAILU ---
     st.markdown("""
+    <br>
     <p style="color:red;"><b>Dodávka štiepky od p. Ing. Jankulu je stanovená len odhadom. 
     Skutočné dodané množstvo bude uvedené na faktúre.</b></p>
     S pozdravom,
@@ -329,4 +365,3 @@ if st.button("🚀 Generuj report", type="primary"):
     Technik pre tepelné bilancie a chemickú kontrolu<br>
     HANDLOVSKÁ ENERGETIKA, s.r.o.
     """, unsafe_allow_html=True)
-
