@@ -227,7 +227,7 @@ st.write("Vyber dátum a vygeneruj report, ktorý si môžeš skopírovať do ma
 dnes = datetime.datetime.today().date()
 vcera = dnes - datetime.timedelta(days=1)
 
-vybrany_datum = st.date_input("Dátum reportu:", value=vcera, max_value=dnes)
+vybrany_datum = st.date_input("Dátum reportu:", value=vcera, max_value=dnes, format="DD/MM/YYYY")
 
 if st.button("🚀 Generuj report", type="primary"):
     with st.spinner('Načítavam a spracúvam dáta z Google Sheets...'):
@@ -367,3 +367,4 @@ if st.button("🚀 Generuj report", type="primary"):
     Technik pre tepelné bilancie a chemickú kontrolu<br>
     HANDLOVSKÁ ENERGETIKA, s.r.o.
     """, unsafe_allow_html=True)
+
