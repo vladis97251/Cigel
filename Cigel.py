@@ -1,12 +1,27 @@
 import datetime
 import calendar
 import math
+import io
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
 
 # ════════════════════════════════════════════════════════════════
-# KONFIGURÁCIA GOOGLE SHEETS – DODÁVKY ŠTIEPKY (BC = Baňa Cigeľ)
+# NASTAVENIE STRÁNKY A DIZAJNU (Skrytie menu a pätky)
+# ════════════════════════════════════════════════════════════════
+st.set_page_config(page_title="Generátor reportov", page_icon="🏭", layout="centered")
+
+hide_streamlit_style = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+# ════════════════════════════════════════════════════════════════
+# KONFIGURÁCIA GOOGLE SHEETS
 # ════════════════════════════════════════════════════════════════
 DODAVKY_SHEET_ID = "1MB041dTwz-zfGg6u3wM1XpmrS_ynDe1J"
 
@@ -23,9 +38,6 @@ COL_JANKULA    = 4
 COL_PC_STAV    = 1
 RIADOK_PC_STAV_IDX = 36
 
-# ════════════════════════════════════════════════════════════════
-# KONFIGURÁCIA GOOGLE SHEETS – PREVÁDZKOVÝ ZÁZNAM
-# ════════════════════════════════════════════════════════════════
 PREVADZKA_SHEETS = {
     2: {
         "sheet_id":   "1FXmRJwlRr6N2u_aZzuzjnn0HHgNEBTem64B1phXl_NM",
@@ -49,9 +61,9 @@ MC_T_K6 = 4; MC_T_K7 = 23; MC_PRIETOK = 13
 DZ_K6 = 13; DZ_K7 = 30
 
 # ════════════════════════════════════════════════════════════════
-# POMOCNÉ FUNKCIE
+# POMOCNÉ FUNKCIE (Dáta a výpočty)
 # ════════════════════════════════════════════════════════════════
-@st.cache_data(ttl=600) # Cache na 10 minút, aby sa appka načítavala rýchlejšie
+@st.cache_data(ttl=600)
 def nacitaj_gs(sheet_id: str, gid: str) -> pd.DataFrame | None:
     url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
     try:
@@ -159,8 +171,15 @@ def vypocitaj_vydrz_zasoby(pociatocny_stav, spotreba_doteraz, aktualna_denna_spo
     return aktualny_datum + datetime.timedelta(days=dni), dni
 
 # ════════════════════════════════════════════════════════════════
-# GRAFY PRE STREAMLIT
+# POMOCNÉ FUNKCIE PRE GRAFY A STIAHNUTIE
 # ════════════════════════════════════════════════════════════════
+def graf_do_pamate(fig):
+    """Uloží graf do pamäte pre tlačidlo na stiahnutie."""
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', bbox_inches='tight', dpi=150)
+    buf.seek(0)
+    return buf
+
 def create_bar_chart(vyroba, priem_teplota, teplota_k6, teplota_k7):
     vyroba_num = float(vyroba.split()[0].replace(',', '.'))
     priem_teplota_num = float(priem_teplota.split()[0].replace(',', '.'))
@@ -168,29 +187,24 @@ def create_bar_chart(vyroba, priem_teplota, teplota_k6, teplota_k7):
     teplota_k7_num = float(teplota_k7.split()[0].replace(',', '.'))
 
     fig, ax = plt.subplots(figsize=(8, 4))
-    fig.patch.set_alpha(0)          # priehľadné pozadie figury
-    ax.patch.set_alpha(0)           # priehľadné pozadie axes
     bars = ax.bar(['Výroba\n(MWh)', 'Priem. teplota\n(°C)', 'Teplota K6\n(°C)', 'Teplota K7\n(°C)'],
                   [vyroba_num, priem_teplota_num, teplota_k6_num, teplota_k7_num],
-                  color=['#8CC63F', '#4a9fd4', '#e07b39', '#a259c4'])
-
+                  color=['#8CC63F', '#2B2B2B', '#5A5A5A', '#7A7A7A'])
+    
     for bar in bars:
-        ax.text(bar.get_x() + bar.get_width()/2., bar.get_height(), f'{bar.get_height():.1f}',
+        ax.text(bar.get_x() + bar.get_width()/2., bar.get_height(), f'{bar.get_height():.1f}', 
                 ha='center', va='bottom')
     ax.grid(True, linestyle='--', alpha=0.3, axis='y')
     ax.set_title('Prevádzkové hodnoty', pad=20, fontsize=12, fontweight='bold')
     return fig
 
-
 def create_line_chart(values, chart_title, line_color):
     fig, ax = plt.subplots(figsize=(8, 4))
-    fig.patch.set_alpha(0)          # priehľadné pozadie figury
-    ax.patch.set_alpha(0)           # priehľadné pozadie axes
     x = range(1, 25)
     ax.plot(x, values, marker='o', color=line_color, linewidth=1.5)
     ax.axhline(y=3.0, color='red', linestyle='--', linewidth=2)
     ax.text(24.5, 3.0, 'MAX výkon', color='red', fontweight='bold', va='center', ha='left', fontsize=10)
-
+    
     ax.grid(True, linestyle='--', alpha=0.3)
     ax.set_title(chart_title, pad=20, fontsize=12, fontweight='bold')
     ax.set_xlabel("Hodina")
@@ -198,7 +212,7 @@ def create_line_chart(values, chart_title, line_color):
     ax.set_xlim(1, 24)
     ax.set_ylim(0, 4)
     ax.set_xticks(range(1, 25))
-
+    
     for i, val in enumerate(values):
         if val is not None and val > 0:
             ax.text(x[i], val, f"{val:.1f}", ha='center', va='bottom', fontsize=8)
@@ -207,8 +221,6 @@ def create_line_chart(values, chart_title, line_color):
 # ════════════════════════════════════════════════════════════════
 # STREAMLIT APLIKÁCIA
 # ════════════════════════════════════════════════════════════════
-st.set_page_config(page_title="Generátor reportov", page_icon="🏭", layout="centered")
-
 st.title("🏭 Prevádzkový report - Cigeľ")
 st.write("Vyber dátum a vygeneruj report, ktorý si môžeš skopírovať do mailu.")
 
@@ -257,103 +269,97 @@ if st.button("🚀 Generuj report", type="primary"):
         # Formátovanie
         def fmt(val, jednotka=""): return str(round(val, 2)).replace('.', ',') + (f" {jednotka}" if jednotka else "")
 
-        # CSS pre light aj dark mode – použijeme CSS triedy namiesto inline štýlov
-        TABLE_CSS = """
-        <style>
-          :root {
-            --bg-main:   #ffffff;
-            --bg-alt:    #f8f9fa;
-            --text-main: #2B2B2B;
-            --border:    #dddddd;
-          }
-          @media (prefers-color-scheme: dark) {
-            :root {
-              --bg-main:   #1e1e1e;
-              --bg-alt:    #2a2a2a;
-              --text-main: #f0f0f0;
-              --border:    #444444;
-            }
-          }
-          table { width:100%; border-collapse:collapse; font-family:sans-serif; }
-          th    { padding:10px; text-align:left; color:white; }
-          th.right { text-align:right; }
-          td    { padding:10px; color:var(--text-main); background:var(--bg-main); }
-          td.label-green { border-left:4px solid #8CC63F; }
-          td.label-gray  { border-left:4px solid #5A5A5A; }
-          td.value { text-align:right; font-weight:bold; }
-          tr.alt td { background:var(--bg-alt); }
-          .tbl-border { border:1px solid var(--border); }
-        </style>
-        """
-
+        # HTML Generovanie (Opravené farby pre tmavý režim na mobile)
         def td_row(label, value, alt=False):
-            cls = ' class="alt"' if alt else ''
-            return (f"<tr{cls}>"
-                    f"<td class='label-green'>{label}</td>"
-                    f"<td class='value'>{value}</td>"
-                    f"</tr>")
-
-        html_table = TABLE_CSS + f"""
-        <table>
-          <tr><th style='background:#8CC63F;'>Parameter</th>
-              <th class='right' style='background:#8CC63F;'>Hodnota</th></tr>
-          {td_row("Výroba", fmt(prev["vyroba_val"], "MWh"))}
-          {td_row("Kumulatívna výroba", fmt(prev["monthly_sum"], "MWh"), True)}
-          {td_row("Priem. hod. výkon K6", fmt(priem_vykon_k6, f"MW ({pocet_h_k6}h)"))}
-          {td_row("Priem. hod. výkon K7", fmt(priem_vykon_k7, f"MW ({pocet_h_k7}h)"), True)}
-          {td_row("Priem. hod. výkon spolu", fmt(priem_vykon_spolu, "MW"))}
-          {td_row("Priem. výstupná teplota", fmt(prev["priem_teplota_val"], "°C"), True)}
-          {td_row("Priem. vratná teplota", fmt(prev["vratna_teplota_val"], "°C"))}
-          {td_row("Teplota spaľ. komory K6", fmt(prev["teplota_k6_val"], "°C"), True)}
-          {td_row("Teplota spaľ. komory K7", fmt(prev["teplota_k7_val"], "°C"))}
-          {td_row("Priemerný prietok", fmt(prev["priem_prietok_val"], "m³"), True)}
-        </table>
+            # Nastavíme biele pozadie pre bežné riadky a svetlosivé pre alternatívne
+            bg_color = "#f8f9fa" if alt else "#ffffff"
+            return f"<tr style='background: {bg_color};'><td style='padding:10px;border-left:4px solid #8CC63F; color:#2B2B2B;'>{label}</td><td style='padding:10px;text-align:right;font-weight:bold; color:#2B2B2B;'>{value}</td></tr>"
+        
+        html_table = f"""
+        <table style='width:100%; border-collapse:collapse; font-family:sans-serif;'>
+            <tr style='background:#8CC63F;color:white;'><th style='padding:10px;text-align:left;'>Parameter</th><th style='padding:10px;text-align:right;'>Hodnota</th></tr>
+            {td_row("Výroba", fmt(prev["vyroba_val"], "MWh"))}
+            {td_row("Kumulatívna výroba", fmt(prev["monthly_sum"], "MWh"), True)}
+            {td_row("Priem. hod. výkon K6", fmt(priem_vykon_k6, f"MW ({pocet_h_k6}h)"))}
+            {td_row("Priem. hod. výkon K7", fmt(priem_vykon_k7, f"MW ({pocet_h_k7}h)"), True)}
+            {td_row("Priem. hod. výkon spolu", fmt(priem_vykon_spolu, "MW"))}
+            {td_row("Priem. výstupná teplota", fmt(prev["priem_teplota_val"], "°C"), True)}
+            {td_row("Priem. vratná teplota", fmt(prev["vratna_teplota_val"], "°C"))}
+            {td_row("Teplota spaľ. komory K6", fmt(prev["teplota_k6_val"], "°C"), True)}
+            {td_row("Teplota spaľ. komory K7", fmt(prev["teplota_k7_val"], "°C"))}
+            {td_row("Priemerný prietok", fmt(prev["priem_prietok_val"], "m³"), True)}
+        </table><br>
         """
 
         def td_row_stiepka(label, value, alt=False):
-            cls = ' class="alt"' if alt else ''
-            return (f"<tr{cls}>"
-                    f"<td class='label-gray'>{label}</td>"
-                    f"<td class='value'>{value}</td>"
-                    f"</tr>")
+            # Nastavíme biele pozadie pre bežné riadky a svetlosivé pre alternatívne
+            bg_color = "#f8f9fa" if alt else "#ffffff"
+            return f"<tr style='background: {bg_color};'><td style='padding:10px;border-left:4px solid #5A5A5A; color:#2B2B2B;'>{label}</td><td style='padding:10px;text-align:right;font-weight:bold; color:#2B2B2B;'>{value}</td></tr>"
 
-        html_stiepka_info = TABLE_CSS + f"""
-        <table class='tbl-border'>
-          <tr><th colspan='2' style='background:#5A5A5A;'>Informácie o zásobe štiepky</th></tr>
-          {td_row_stiepka("Počiatočný stav skladu", fmt(dodavky["pociatocny_stav"], "t"))}
-          {td_row_stiepka("Dodávka – Bodos", fmt(dodavky["bodos"], "t"), True)}
-          {td_row_stiepka("Dodávka – z dreva HBP", fmt(dodavky["hbp_drevo"], "t"))}
-          {td_row_stiepka("Dodávka – Recyklácia", fmt(dodavky["recyklacia"], "t"), True)}
-          {td_row_stiepka("Dodávka – Jankula", fmt(dodavky["jankula"], "t"))}
-          {td_row_stiepka("Spotreba od začiatku mesiaca", fmt(prev["stiepka_monthly_sum"], "t"), True)}
-          {td_row_stiepka(f"Zostatok na skládke k {vybrany_datum.strftime('%d.%m.%Y')}", fmt(zostatok_stiepky, "t"))}
-          {td_row_stiepka("Aktuálna denná spotreba", fmt(prev["aktualna_denna_spotreba"], "t"), True)}
-          {td_row_stiepka("Predpokladaná výdrž zásoby", "0 dní" if pocet_zostavajucich_dni <= 0 else f"{pocet_zostavajucich_dni} dní")}
-          {td_row_stiepka("Predpokladaný dátum vyčerpania", "Dnes" if pocet_zostavajucich_dni <= 0 else datum_vycerpania.strftime('%d.%m.%Y'), True)}
-        </table>
+        html_stiepka_info = f"""
+        <table style='width:100%; border-collapse:collapse; font-family:sans-serif; border:1px solid #ddd;'>
+            <tr style='background:#5A5A5A;color:white;'><th colspan='2' style='padding:10px;text-align:left;'>Informácie o zásobe štiepky</th></tr>
+            {td_row_stiepka("Počiatočný stav skladu", fmt(dodavky["pociatocny_stav"], "t"))}
+            {td_row_stiepka("Dodávka – Bodos", fmt(dodavky["bodos"], "t"), True)}
+            {td_row_stiepka("Dodávka – z dreva HBP", fmt(dodavky["hbp_drevo"], "t"))}
+            {td_row_stiepka("Dodávka – Recyklácia", fmt(dodavky["recyklacia"], "t"), True)}
+            {td_row_stiepka("Dodávka – Jankula", fmt(dodavky["jankula"], "t"))}
+            {td_row_stiepka("Spotreba od začiatku mesiaca", fmt(prev["stiepka_monthly_sum"], "t"), True)}
+            {td_row_stiepka(f"Zostatok na skládke k {vybrany_datum.strftime('%d.%m.%Y')}", fmt(zostatok_stiepky, "t"))}
+            {td_row_stiepka("Aktuálna denná spotreba", fmt(prev["aktualna_denna_spotreba"], "t"), True)}
+            {td_row_stiepka("Predpokladaná výdrž zásoby", "0 dní" if pocet_zostavajucich_dni <= 0 else f"{pocet_zostavajucich_dni} dní")}
+            {td_row_stiepka("Predpokladaný dátum vyčerpania", "Dnes" if pocet_zostavajucich_dni <= 0 else datum_vycerpania.strftime('%d.%m.%Y'), True)}
+        </table><br>
         """
 
     st.success("Report bol úspešne vygenerovaný! Skopíruj si ho nižšie.")
     st.divider()
-
-    # --- VÝSTUP PRE KOPÍROVANIE ---
-    st.markdown(f"Dobrý deň,\n\nZasielam Vám hodnoty z prevádzkového záznamu za deň {vybrany_datum.strftime('%d.%m.%Y')}:")
     
-    import streamlit.components.v1 as components
-    components.html(html_table, height=400, scrolling=False)
-    components.html(html_stiepka_info, height=450, scrolling=False)
+    # --- PREDMET E-MAILU ---
+    st.markdown("**Predmet e-mailu (skopíruj text nižšie):**")
+    st.code(f"Prevádzkový záznam - hodnoty za {vybrany_datum.strftime('%d.%m.%Y')}", language="text")
+    st.write("")
 
+    # --- TELO E-MAILU ---
+    st.markdown(f"Dobrý deň,\n\nZasielam Vám hodnoty z prevádzkového záznamu za deň {vybrany_datum.strftime('%d.%m.%Y')}:")
+    st.markdown(html_table, unsafe_allow_html=True)
+    st.markdown(html_stiepka_info, unsafe_allow_html=True)
+
+    # --- GRAFY A TLAČIDLÁ NA STIAHNUTIE ---
     st.markdown("### Prevádzkové hodnoty")
-    st.pyplot(create_bar_chart(fmt(prev["vyroba_val"], "MWh"), fmt(prev["priem_teplota_val"], "°C"), 
-                               fmt(prev["teplota_k6_val"], "°C"), fmt(prev["teplota_k7_val"], "°C")))
+    fig_prevadzka = create_bar_chart(fmt(prev["vyroba_val"], "MWh"), fmt(prev["priem_teplota_val"], "°C"), 
+                                     fmt(prev["teplota_k6_val"], "°C"), fmt(prev["teplota_k7_val"], "°C"))
+    st.pyplot(fig_prevadzka)
+    st.download_button(
+        label="💾 Stiahnuť graf prevádzkových hodnôt",
+        data=graf_do_pamate(fig_prevadzka),
+        file_name=f"Prevadzkove_hodnoty_{vybrany_datum.strftime('%d_%m_%Y')}.png",
+        mime="image/png"
+    )
 
     st.markdown("### Výkon kotla K6")
-    st.pyplot(create_line_chart(hours_data_k6, "Výkon kotla K6", "#8CC63F"))
+    fig_k6 = create_line_chart(hours_data_k6, "Výkon kotla K6", "#8CC63F")
+    st.pyplot(fig_k6)
+    st.download_button(
+        label="💾 Stiahnuť graf K6",
+        data=graf_do_pamate(fig_k6),
+        file_name=f"Vykon_K6_{vybrany_datum.strftime('%d_%m_%Y')}.png",
+        mime="image/png"
+    )
 
     st.markdown("### Výkon kotla K7")
-    st.pyplot(create_line_chart(hours_data_k7, "Výkon kotla K7", "#2B2B2B"))
+    fig_k7 = create_line_chart(hours_data_k7, "Výkon kotla K7", "#2B2B2B")
+    st.pyplot(fig_k7)
+    st.download_button(
+        label="💾 Stiahnuť graf K7",
+        data=graf_do_pamate(fig_k7),
+        file_name=f"Vykon_K7_{vybrany_datum.strftime('%d_%m_%Y')}.png",
+        mime="image/png"
+    )
 
+    # --- ZÁVER E-MAILU ---
     st.markdown("""
+    <br>
     <p style="color:red;"><b>Dodávka štiepky od p. Ing. Jankulu je stanovená len odhadom. 
     Skutočné dodané množstvo bude uvedené na faktúre.</b></p>
     S pozdravom,
