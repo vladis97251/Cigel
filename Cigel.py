@@ -14,9 +14,10 @@ from reportlab.lib.units import mm
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import (
-    BaseDocTemplate, PageTemplate, Frame, NextPageTemplate, PageBreak,
+    SimpleDocTemplate, PageBreak,
     Paragraph, Spacer, Table, TableStyle, Image as RLImage, KeepTogether
 )
+from reportlab.lib.utils import ImageReader
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -257,11 +258,16 @@ def _fig_to_rl_image(fig, width_mm=170):
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
     buf.seek(0)
-    img = RLImage(buf, width=width_mm * mm)
-    # Zachovaj pomer strán
-    orig_w, orig_h = fig.get_size_inches()
-    ratio = orig_h / orig_w
-    img._height = width_mm * mm * ratio
+    
+    # Prečítame skutočné rozmery vygenerovaného PNG, aby sme získali 100% presný pomer strán
+    img_reader = ImageReader(buf)
+    img_w, img_h = img_reader.getSize()
+    ratio = img_h / img_w
+    
+    # Zásadný krok: vrátime kurzor buffera na začiatok predtým, ako ho dáme ReportLabu
+    buf.seek(0)
+    
+    img = RLImage(buf, width=width_mm * mm, height=width_mm * mm * ratio)
     return img
 
 def generuj_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
@@ -272,22 +278,14 @@ def generuj_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
     """Vygeneruje kompletný PDF report do BytesIO bufferu."""
 
     buf = io.BytesIO()
-
     MARGIN = 15 * mm
-    page_w, page_h = A4  # 210 x 297 mm
 
-    # Portrait frame (strana 1 – tabuľky)
-    portrait_frame = Frame(MARGIN, MARGIN, page_w - 2 * MARGIN, page_h - 2 * MARGIN, id='portrait')
-    # Landscape frame (strany 2-4 – grafy)
-    landscape_frame = Frame(MARGIN, MARGIN, page_h - 2 * MARGIN, page_w - 2 * MARGIN, id='landscape')
-
-    doc = BaseDocTemplate(buf, pagesize=A4,
-                          leftMargin=MARGIN, rightMargin=MARGIN,
-                          topMargin=MARGIN, bottomMargin=MARGIN)
-    doc.addPageTemplates([
-        PageTemplate(id='portrait', frames=[portrait_frame], pagesize=A4),
-        PageTemplate(id='landscape', frames=[landscape_frame], pagesize=(page_h, page_w)),
-    ])
+    # Obyčajný SimpleDocTemplate prevezme starosť o oddeľovanie strán
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=MARGIN, rightMargin=MARGIN,
+        topMargin=MARGIN, bottomMargin=MARGIN
+    )
 
     styles = getSampleStyleSheet()
 
@@ -371,11 +369,9 @@ def generuj_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
         ('LEFTPADDING',   (0, 0), (-1, -1), 6),
         ('RIGHTPADDING',  (0, 0), (-1, -1), 6),
     ]
-    # Alternatívne šedé pozadie
     for i in range(1, len(prev_data)):
         if i % 2 == 0:
             t1_style.append(('BACKGROUND', (0, i), (-1, i), LIGHT_BG))
-    # Zelený ľavý border
     for i in range(1, len(prev_data)):
         t1_style.append(('LINEBEFORESTROKEWIDTH', (0, i), (0, i), 3))
         t1_style.append(('LINEBEFORECOLOR', (0, i), (0, i), GREEN))
@@ -427,26 +423,27 @@ def generuj_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
     story.append(t2)
     story.append(Spacer(1, 6 * mm))
 
-    # ── Prepnutie na landscape pre grafy ──
-    story.append(NextPageTemplate('landscape'))
+    # ── Grafy na novej strane (všetko na výšku) ──
     story.append(PageBreak())
 
-    # Šírka obrázku v landscape
-    LANDSCAPE_IMG_W = 250
+    # Maximálna šírka obrázku, aby pekne sadol na A4 s 15mm okrajmi
+    IMG_W = 175
 
-    # Graf 1 – Prevádzkové hodnoty
+    # Graf 1
     story.append(Paragraph("Prevádzkové hodnoty", style_section))
-    story.append(_fig_to_rl_image(fig_prevadzka, width_mm=LANDSCAPE_IMG_W))
+    story.append(_fig_to_rl_image(fig_prevadzka, width_mm=IMG_W))
+    story.append(Spacer(1, 5 * mm))
 
-    # Graf 2 – Výkon K6
-    story.append(PageBreak())
+    # Graf 2
     story.append(Paragraph("Výkon kotla K6", style_section))
-    story.append(_fig_to_rl_image(fig_k6, width_mm=LANDSCAPE_IMG_W))
+    story.append(_fig_to_rl_image(fig_k6, width_mm=IMG_W))
+    story.append(Spacer(1, 5 * mm))
 
-    # Graf 3 – Výkon K7 + poznámka + podpis
-    story.append(PageBreak())
+    # Graf 3
+    # ReportLab tu sám prehodí stranu, ak sa graf K7 nezmestí k predošlému.
     story.append(Paragraph("Výkon kotla K7", style_section))
-    story.append(_fig_to_rl_image(fig_k7, width_mm=LANDSCAPE_IMG_W))
+    story.append(_fig_to_rl_image(fig_k7, width_mm=IMG_W))
+    story.append(Spacer(1, 8 * mm))
 
     # ── Poznámka a podpis ──
     story.append(Paragraph(
@@ -462,6 +459,7 @@ def generuj_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
         style_podpis,
     ))
 
+    # Vygenerovanie dokumentu!
     doc.build(story)
     buf.seek(0)
     return buf
