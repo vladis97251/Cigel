@@ -7,6 +7,18 @@ import matplotlib.pyplot as plt
 import streamlit as st
 
 # ════════════════════════════════════════════════════════════════
+# PDF EXPORT – reportlab
+# ════════════════════════════════════════════════════════════════
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage, KeepTogether
+)
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+
+# ════════════════════════════════════════════════════════════════
 # NASTAVENIE STRÁNKY A DIZAJNU (Skrytie menu a pätky)
 # ════════════════════════════════════════════════════════════════
 st.set_page_config(page_title="Generátor reportov", page_icon="🏭", layout="centered")
@@ -206,7 +218,6 @@ def create_line_chart(values, chart_title, line_color):
     ax.plot(x, values, marker='o', color=line_color, linewidth=1.5)
     ax.axhline(y=3.0, color='red', linestyle='--', linewidth=2)
     
-    # OPRAVA: Text sme presunuli dovnútra grafu, tesne nad čiaru (y=3.05) a na koniec osi X (x=24)
     ax.text(24, 3.05, 'MAX výkon', color='red', fontweight='bold', va='bottom', ha='right', fontsize=10)
     
     ax.grid(True, linestyle='--', alpha=0.3)
@@ -223,6 +234,204 @@ def create_line_chart(values, chart_title, line_color):
             
     fig.subplots_adjust(left=0.12, right=0.95, top=0.88, bottom=0.20)
     return fig
+
+# ════════════════════════════════════════════════════════════════
+# PDF GENEROVANIE
+# ════════════════════════════════════════════════════════════════
+def _fig_to_rl_image(fig, width_mm=170):
+    """Konvertuje matplotlib figúru na reportlab Image objekt."""
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+    buf.seek(0)
+    img = RLImage(buf, width=width_mm * mm)
+    # Zachovaj pomer strán
+    orig_w, orig_h = fig.get_size_inches()
+    ratio = orig_h / orig_w
+    img._height = width_mm * mm * ratio
+    return img
+
+def generuj_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
+                prev_aktualna_denna_spotreba, pocet_zostavajucich_dni, datum_vycerpania,
+                priem_vykon_k6, priem_vykon_k7, priem_vykon_spolu,
+                pocet_h_k6, pocet_h_k7,
+                fig_prevadzka, fig_k6, fig_k7, fmt):
+    """Vygeneruje kompletný PDF report do BytesIO bufferu."""
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=15 * mm, rightMargin=15 * mm,
+        topMargin=15 * mm, bottomMargin=15 * mm,
+    )
+
+    styles = getSampleStyleSheet()
+
+    # ── Vlastné štýly ──
+    style_title = ParagraphStyle(
+        'ReportTitle', parent=styles['Title'],
+        fontSize=16, spaceAfter=4 * mm, textColor=colors.HexColor("#2B2B2B"),
+    )
+    style_subtitle = ParagraphStyle(
+        'ReportSubtitle', parent=styles['Normal'],
+        fontSize=10, spaceAfter=6 * mm, textColor=colors.HexColor("#666666"),
+    )
+    style_section = ParagraphStyle(
+        'SectionHeader', parent=styles['Heading2'],
+        fontSize=12, spaceBefore=6 * mm, spaceAfter=3 * mm,
+        textColor=colors.white, backColor=colors.HexColor("#8CC63F"),
+        borderPadding=(4, 6, 4, 6),
+    )
+    style_section_dark = ParagraphStyle(
+        'SectionHeaderDark', parent=style_section,
+        backColor=colors.HexColor("#5A5A5A"),
+    )
+    style_note = ParagraphStyle(
+        'NoteStyle', parent=styles['Normal'],
+        fontSize=9, textColor=colors.red, spaceBefore=4 * mm,
+    )
+    style_podpis = ParagraphStyle(
+        'Podpis', parent=styles['Normal'],
+        fontSize=9, textColor=colors.HexColor("#333333"), spaceBefore=6 * mm,
+    )
+
+    GREEN = colors.HexColor("#8CC63F")
+    GREY = colors.HexColor("#5A5A5A")
+    LIGHT_BG = colors.HexColor("#f8f9fa")
+
+    story = []
+
+    # ── Hlavička ──
+    story.append(Paragraph("Prevádzkový report – Cigeľ", style_title))
+    story.append(Paragraph(
+        f"Prevádzkový záznam – hodnoty za {vybrany_datum.strftime('%d.%m.%Y')}",
+        style_subtitle,
+    ))
+
+    # ── Tabuľka prevádzkových údajov ──
+    story.append(Paragraph("Prevádzkové údaje", style_section))
+
+    prev_data = [
+        ["Parameter", "Hodnota"],
+        ["Výroba", fmt(prev["vyroba_val"], "MWh")],
+        ["Kumulatívna výroba", fmt(prev["monthly_sum"], "MWh")],
+        ["Priem. hod. výkon K6", fmt(priem_vykon_k6, f"MW ({pocet_h_k6}h)")],
+        ["Priem. hod. výkon K7", fmt(priem_vykon_k7, f"MW ({pocet_h_k7}h)")],
+        ["Priem. hod. výkon spolu", fmt(priem_vykon_spolu, "MW")],
+        ["Priem. výstupná teplota", fmt(prev["priem_teplota_val"], "°C")],
+        ["Priem. vratná teplota", fmt(prev["vratna_teplota_val"], "°C")],
+        ["Teplota spaľ. komory K6", fmt(prev["teplota_k6_val"], "°C")],
+        ["Teplota spaľ. komory K7", fmt(prev["teplota_k7_val"], "°C")],
+        ["Priemerný prietok", fmt(prev["priem_prietok_val"], "m³")],
+    ]
+
+    col_widths = [100 * mm, 70 * mm]
+    t1 = Table(prev_data, colWidths=col_widths)
+    t1_style = [
+        ('BACKGROUND', (0, 0), (-1, 0), GREEN),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME',  (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTNAME',  (0, 1), (0, -1), 'Helvetica'),
+        ('FONTNAME',  (1, 1), (1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE',  (0, 0), (-1, -1), 9),
+        ('ALIGN',     (1, 0), (1, -1), 'RIGHT'),
+        ('VALIGN',    (0, 0), (-1, -1), 'MIDDLE'),
+        ('GRID',      (0, 0), (-1, -1), 0.5, colors.HexColor("#dddddd")),
+        ('TOPPADDING',    (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 6),
+    ]
+    # Alternatívne šedé pozadie
+    for i in range(1, len(prev_data)):
+        if i % 2 == 0:
+            t1_style.append(('BACKGROUND', (0, i), (-1, i), LIGHT_BG))
+    # Zelený ľavý border
+    for i in range(1, len(prev_data)):
+        t1_style.append(('LINEBEFORESTROKEWIDTH', (0, i), (0, i), 3))
+        t1_style.append(('LINEBEFORECOLOR', (0, i), (0, i), GREEN))
+
+    t1.setStyle(TableStyle(t1_style))
+    story.append(t1)
+    story.append(Spacer(1, 4 * mm))
+
+    # ── Tabuľka štiepky ──
+    story.append(Paragraph("Informácie o zásobe štiepky", style_section_dark))
+
+    stiepka_data = [
+        ["Parameter", "Hodnota"],
+        ["Počiatočný stav skladu", fmt(dodavky["pociatocny_stav"], "t")],
+        ["Dodávka – Bodos", fmt(dodavky["bodos"], "t")],
+        ["Dodávka – z dreva HBP", fmt(dodavky["hbp_drevo"], "t")],
+        ["Dodávka – Recyklácia", fmt(dodavky["recyklacia"], "t")],
+        ["Dodávka – Jankula", fmt(dodavky["jankula"], "t")],
+        ["Spotreba od začiatku mesiaca", fmt(prev["stiepka_monthly_sum"], "t")],
+        [f"Zostatok na skládke k {vybrany_datum.strftime('%d.%m.%Y')}", fmt(zostatok_stiepky, "t")],
+        ["Aktuálna denná spotreba", fmt(prev_aktualna_denna_spotreba, "t")],
+        ["Predpokladaná výdrž zásoby", "0 dní" if pocet_zostavajucich_dni <= 0 else f"{pocet_zostavajucich_dni} dní"],
+        ["Predpokladaný dátum vyčerpania", "Dnes" if pocet_zostavajucich_dni <= 0 else datum_vycerpania.strftime('%d.%m.%Y')],
+    ]
+
+    t2 = Table(stiepka_data, colWidths=col_widths)
+    t2_style = [
+        ('BACKGROUND', (0, 0), (-1, 0), GREY),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME',  (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTNAME',  (0, 1), (0, -1), 'Helvetica'),
+        ('FONTNAME',  (1, 1), (1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE',  (0, 0), (-1, -1), 9),
+        ('ALIGN',     (1, 0), (1, -1), 'RIGHT'),
+        ('VALIGN',    (0, 0), (-1, -1), 'MIDDLE'),
+        ('GRID',      (0, 0), (-1, -1), 0.5, colors.HexColor("#dddddd")),
+        ('TOPPADDING',    (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 6),
+    ]
+    for i in range(1, len(stiepka_data)):
+        if i % 2 == 0:
+            t2_style.append(('BACKGROUND', (0, i), (-1, i), LIGHT_BG))
+        t2_style.append(('LINEBEFORESTROKEWIDTH', (0, i), (0, i), 3))
+        t2_style.append(('LINEBEFORECOLOR', (0, i), (0, i), GREY))
+
+    t2.setStyle(TableStyle(t2_style))
+    story.append(t2)
+    story.append(Spacer(1, 6 * mm))
+
+    # ── Grafy ──
+    story.append(KeepTogether([
+        Paragraph("Prevádzkové hodnoty", style_section),
+        _fig_to_rl_image(fig_prevadzka),
+    ]))
+    story.append(Spacer(1, 4 * mm))
+
+    story.append(KeepTogether([
+        Paragraph("Výkon kotla K6", style_section),
+        _fig_to_rl_image(fig_k6),
+    ]))
+    story.append(Spacer(1, 4 * mm))
+
+    story.append(KeepTogether([
+        Paragraph("Výkon kotla K7", style_section),
+        _fig_to_rl_image(fig_k7),
+    ]))
+
+    # ── Poznámka a podpis ──
+    story.append(Paragraph(
+        "<b>Dodávka štiepky od p. Ing. Jankulu je stanovená len odhadom. "
+        "Skutočné dodané množstvo bude uvedené na faktúre.</b>",
+        style_note,
+    ))
+    story.append(Paragraph(
+        "S pozdravom,<br/><br/>"
+        "<b>Vladimír Hlucháň</b><br/>"
+        "Technik pre tepelné bilancie a chemickú kontrolu<br/>"
+        "HANDLOVSKÁ ENERGETIKA, s.r.o.",
+        style_podpis,
+    ))
+
+    doc.build(story)
+    buf.seek(0)
+    return buf
 
 # ════════════════════════════════════════════════════════════════
 # STREAMLIT APLIKÁCIA
@@ -277,7 +486,6 @@ if st.button("🚀 Generuj report", type="primary"):
 
         # HTML Generovanie (Opravené farby pre tmavý režim na mobile)
         def td_row(label, value, alt=False):
-            # Nastavíme biele pozadie pre bežné riadky a svetlosivé pre alternatívne
             bg_color = "#f8f9fa" if alt else "#ffffff"
             return f"<tr style='background: {bg_color};'><td style='padding:10px;border-left:4px solid #8CC63F; color:#2B2B2B;'>{label}</td><td style='padding:10px;text-align:right;font-weight:bold; color:#2B2B2B;'>{value}</td></tr>"
         
@@ -298,7 +506,6 @@ if st.button("🚀 Generuj report", type="primary"):
         """
 
         def td_row_stiepka(label, value, alt=False):
-            # Nastavíme biele pozadie pre bežné riadky a svetlosivé pre alternatívne
             bg_color = "#f8f9fa" if alt else "#ffffff"
             return f"<tr style='background: {bg_color};'><td style='padding:10px;border-left:4px solid #5A5A5A; color:#2B2B2B;'>{label}</td><td style='padding:10px;text-align:right;font-weight:bold; color:#2B2B2B;'>{value}</td></tr>"
 
@@ -363,6 +570,35 @@ if st.button("🚀 Generuj report", type="primary"):
         mime="image/png"
     )
 
+    # ── PDF EXPORT ──
+    st.divider()
+    pdf_buf = generuj_pdf(
+        vybrany_datum=vybrany_datum,
+        prev=prev,
+        dodavky=dodavky,
+        celkove_dodavky=celkove_dodavky,
+        zostatok_stiepky=zostatok_stiepky,
+        prev_aktualna_denna_spotreba=prev["aktualna_denna_spotreba"],
+        pocet_zostavajucich_dni=pocet_zostavajucich_dni,
+        datum_vycerpania=datum_vycerpania,
+        priem_vykon_k6=priem_vykon_k6,
+        priem_vykon_k7=priem_vykon_k7,
+        priem_vykon_spolu=priem_vykon_spolu,
+        pocet_h_k6=pocet_h_k6,
+        pocet_h_k7=pocet_h_k7,
+        fig_prevadzka=fig_prevadzka,
+        fig_k6=fig_k6,
+        fig_k7=fig_k7,
+        fmt=fmt,
+    )
+    st.download_button(
+        label="📄 Stiahnuť kompletný report (PDF)",
+        data=pdf_buf,
+        file_name=f"Report_Cigel_{vybrany_datum.strftime('%d_%m_%Y')}.pdf",
+        mime="application/pdf",
+        type="primary",
+    )
+
     # --- ZÁVER E-MAILU ---
     st.markdown("""
     <br>
@@ -373,4 +609,3 @@ if st.button("🚀 Generuj report", type="primary"):
     Technik pre tepelné bilancie a chemickú kontrolu<br>
     HANDLOVSKÁ ENERGETIKA, s.r.o.
     """, unsafe_allow_html=True)
-
