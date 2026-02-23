@@ -203,7 +203,16 @@ def create_line_chart(values, chart_title, line_color):
 # STREAMLIT APLIKÁCIA
 # ════════════════════════════════════════════════════════════════
 st.set_page_config(page_title="Generátor reportov", page_icon="🏭", layout="centered")
-
+# --- SKRYTIE PREDVOLENÉHO STREAMLIT MENU A PÄTKY ---
+hide_streamlit_style = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+# ---------------------------------------------------
 st.title("🏭 Prevádzkový report - Cigeľ")
 st.write("Vyber dátum a vygeneruj report, ktorý si môžeš skopírovať do mailu.")
 
@@ -320,3 +329,4 @@ if st.button("🚀 Generuj report", type="primary"):
     Technik pre tepelné bilancie a chemickú kontrolu<br>
     HANDLOVSKÁ ENERGETIKA, s.r.o.
     """, unsafe_allow_html=True)
+
