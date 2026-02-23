@@ -17,6 +17,19 @@ from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage, KeepTogether
 )
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+
+# ── Registrácia fontu s podporou diakritiky ──
+_FONT_NAME = "DejaVuSans"
+_FONT_NAME_BOLD = "DejaVuSans-Bold"
+try:
+    pdfmetrics.registerFont(TTFont(_FONT_NAME, "DejaVuSans.ttf"))
+    pdfmetrics.registerFont(TTFont(_FONT_NAME_BOLD, "DejaVuSans-Bold.ttf"))
+except Exception:
+    # Fallback – skús plnú cestu (bežnú na Linux/Streamlit Cloud)
+    pdfmetrics.registerFont(TTFont(_FONT_NAME, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
+    pdfmetrics.registerFont(TTFont(_FONT_NAME_BOLD, "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"))
 
 # ════════════════════════════════════════════════════════════════
 # NASTAVENIE STRÁNKY A DIZAJNU (Skrytie menu a pätky)
@@ -269,14 +282,17 @@ def generuj_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
     # ── Vlastné štýly ──
     style_title = ParagraphStyle(
         'ReportTitle', parent=styles['Title'],
+        fontName=_FONT_NAME_BOLD,
         fontSize=16, spaceAfter=4 * mm, textColor=colors.HexColor("#2B2B2B"),
     )
     style_subtitle = ParagraphStyle(
         'ReportSubtitle', parent=styles['Normal'],
+        fontName=_FONT_NAME,
         fontSize=10, spaceAfter=6 * mm, textColor=colors.HexColor("#666666"),
     )
     style_section = ParagraphStyle(
         'SectionHeader', parent=styles['Heading2'],
+        fontName=_FONT_NAME_BOLD,
         fontSize=12, spaceBefore=6 * mm, spaceAfter=3 * mm,
         textColor=colors.white, backColor=colors.HexColor("#8CC63F"),
         borderPadding=(4, 6, 4, 6),
@@ -287,10 +303,12 @@ def generuj_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
     )
     style_note = ParagraphStyle(
         'NoteStyle', parent=styles['Normal'],
+        fontName=_FONT_NAME_BOLD,
         fontSize=9, textColor=colors.red, spaceBefore=4 * mm,
     )
     style_podpis = ParagraphStyle(
         'Podpis', parent=styles['Normal'],
+        fontName=_FONT_NAME,
         fontSize=9, textColor=colors.HexColor("#333333"), spaceBefore=6 * mm,
     )
 
@@ -329,9 +347,9 @@ def generuj_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
     t1_style = [
         ('BACKGROUND', (0, 0), (-1, 0), GREEN),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTNAME',  (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTNAME',  (0, 1), (0, -1), 'Helvetica'),
-        ('FONTNAME',  (1, 1), (1, -1), 'Helvetica-Bold'),
+        ('FONTNAME',  (0, 0), (-1, 0), _FONT_NAME_BOLD),
+        ('FONTNAME',  (0, 1), (0, -1), _FONT_NAME),
+        ('FONTNAME',  (1, 1), (1, -1), _FONT_NAME_BOLD),
         ('FONTSIZE',  (0, 0), (-1, -1), 9),
         ('ALIGN',     (1, 0), (1, -1), 'RIGHT'),
         ('VALIGN',    (0, 0), (-1, -1), 'MIDDLE'),
@@ -375,9 +393,9 @@ def generuj_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
     t2_style = [
         ('BACKGROUND', (0, 0), (-1, 0), GREY),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTNAME',  (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTNAME',  (0, 1), (0, -1), 'Helvetica'),
-        ('FONTNAME',  (1, 1), (1, -1), 'Helvetica-Bold'),
+        ('FONTNAME',  (0, 0), (-1, 0), _FONT_NAME_BOLD),
+        ('FONTNAME',  (0, 1), (0, -1), _FONT_NAME),
+        ('FONTNAME',  (1, 1), (1, -1), _FONT_NAME_BOLD),
         ('FONTSIZE',  (0, 0), (-1, -1), 9),
         ('ALIGN',     (1, 0), (1, -1), 'RIGHT'),
         ('VALIGN',    (0, 0), (-1, -1), 'MIDDLE'),
