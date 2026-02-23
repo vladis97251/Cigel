@@ -186,7 +186,8 @@ def create_bar_chart(vyroba, priem_teplota, teplota_k6, teplota_k7):
     teplota_k6_num = float(teplota_k6.split()[0].replace(',', '.'))
     teplota_k7_num = float(teplota_k7.split()[0].replace(',', '.'))
 
-    fig, ax = plt.subplots(figsize=(8, 4))
+    # Rozmery presne podľa pôvodného kódu 10x5
+    fig, ax = plt.subplots(figsize=(10, 5))
     bars = ax.bar(['Výroba\n(MWh)', 'Priem. teplota\n(°C)', 'Teplota K6\n(°C)', 'Teplota K7\n(°C)'],
                   [vyroba_num, priem_teplota_num, teplota_k6_num, teplota_k7_num],
                   color=['#8CC63F', '#2B2B2B', '#5A5A5A', '#7A7A7A'])
@@ -199,7 +200,8 @@ def create_bar_chart(vyroba, priem_teplota, teplota_k6, teplota_k7):
     return fig
 
 def create_line_chart(values, chart_title, line_color):
-    fig, ax = plt.subplots(figsize=(8, 4))
+    # Rozmery presne podľa pôvodného kódu 10x5
+    fig, ax = plt.subplots(figsize=(10, 5))
     x = range(1, 25)
     ax.plot(x, values, marker='o', color=line_color, linewidth=1.5)
     ax.axhline(y=3.0, color='red', linestyle='--', linewidth=2)
@@ -266,51 +268,115 @@ if st.button("🚀 Generuj report", type="primary"):
         pocet_h_k6, pocet_h_k7 = len(prev_h_k6), len(prev_h_k7)
         priem_vykon_spolu = ((priem_vykon_k6 * pocet_h_k6 + priem_vykon_k7 * pocet_h_k7) / max(pocet_h_k6, pocet_h_k7)) if (pocet_h_k6 + pocet_h_k7 > 0) else 0.0
 
-        # Formátovanie
+        # Formátovanie textov pre tabuľku (Presne podľa pôvodného kódu)
         def fmt(val, jednotka=""): return str(round(val, 2)).replace('.', ',') + (f" {jednotka}" if jednotka else "")
 
-        # HTML Generovanie (Opravené farby pre tmavý režim na mobile)
+        vyroba          = fmt(prev["vyroba_val"], "MWh")
+        vyroba_mesacna  = fmt(prev["monthly_sum"], "MWh")
+        priem_teplota   = fmt(prev["priem_teplota_val"], "°C")
+        vratna_teplota  = fmt(prev["vratna_teplota_val"], "°C")
+        teplota_k6      = fmt(prev["teplota_k6_val"], "°C")
+        teplota_k7      = fmt(prev["teplota_k7_val"], "°C")
+        priem_prietok   = fmt(prev["priem_prietok_val"], "m³")
+
+        spotreba_stiepky_mesacna  = fmt(prev["stiepka_monthly_sum"], "t")
+
+        dodavka_bodos_str         = fmt(dodavky["bodos"], "t")
+        dodavka_hbp_drevo_str     = fmt(dodavky["hbp_drevo"], "t")
+        dodavka_recyklacia_str    = fmt(dodavky["recyklacia"], "t")
+        dodavka_jankula_str       = fmt(dodavky["jankula"], "t")
+        zostatok_stiepky_str      = fmt(zostatok_stiepky, "t")
+        aktualna_denna_spotreba_str = fmt(prev["aktualna_denna_spotreba"], "t")
+
+        priem_vykon_k6_str    = fmt(priem_vykon_k6, f"MW ({pocet_h_k6}h)")
+        priem_vykon_k7_str    = fmt(priem_vykon_k7, f"MW ({pocet_h_k7}h)")
+        priem_vykon_spolu_str = fmt(priem_vykon_spolu, "MW")
+
+        if pocet_zostavajucich_dni <= 0:
+            datum_vycerpania_str      = "Dnes"
+            pocet_zostavajucich_dni_str = "0 dní"
+        else:
+            datum_vycerpania_str        = datum_vycerpania.strftime('%d.%m.%Y')
+            pocet_zostavajucich_dni_str = f"{pocet_zostavajucich_dni} dní"
+
+
+        # ════════════════════════════════════════════════════════════════
+        # HTML GENEROVANIE - PRESNE PODĽA PÔVODNÉHO Cigeľ_4_0.py
+        # ════════════════════════════════════════════════════════════════
         def td_row(label, value, alt=False):
-            # Nastavíme biele pozadie pre bežné riadky a svetlosivé pre alternatívne
-            bg_color = "#f8f9fa" if alt else "#ffffff"
-            return f"<tr style='background: {bg_color};'><td style='padding:10px;border-left:4px solid #8CC63F; color:#2B2B2B;'>{label}</td><td style='padding:10px;text-align:right;font-weight:bold; color:#2B2B2B;'>{value}</td></tr>"
-        
+            # Pridávame color:#2B2B2B kvoli čitateľnosti na mobiloch, inak formát 1:1
+            bg = " style='background: #f8f9fa;'" if alt else " style='background: #ffffff;'"
+            return (f"<tr{bg}>"
+                    f"<td style='padding:15px 20px;border-left:4px solid #8CC63F;"
+                    f"font-weight:500;color:#2B2B2B;'>{label}</td>"
+                    f"<td style='padding:15px 20px;text-align:right;font-size:16px;"
+                    f"color:#2B2B2B;font-weight:bold;'>{value}</td>"
+                    f"</tr>")
+
         html_table = f"""
-        <table style='width:100%; border-collapse:collapse; font-family:sans-serif;'>
-            <tr style='background:#8CC63F;color:white;'><th style='padding:10px;text-align:left;'>Parameter</th><th style='padding:10px;text-align:right;'>Hodnota</th></tr>
-            {td_row("Výroba", fmt(prev["vyroba_val"], "MWh"))}
-            {td_row("Kumulatívna výroba", fmt(prev["monthly_sum"], "MWh"), True)}
-            {td_row("Priem. hod. výkon K6", fmt(priem_vykon_k6, f"MW ({pocet_h_k6}h)"))}
-            {td_row("Priem. hod. výkon K7", fmt(priem_vykon_k7, f"MW ({pocet_h_k7}h)"), True)}
-            {td_row("Priem. hod. výkon spolu", fmt(priem_vykon_spolu, "MW"))}
-            {td_row("Priem. výstupná teplota", fmt(prev["priem_teplota_val"], "°C"), True)}
-            {td_row("Priem. vratná teplota", fmt(prev["vratna_teplota_val"], "°C"))}
-            {td_row("Teplota spaľ. komory K6", fmt(prev["teplota_k6_val"], "°C"), True)}
-            {td_row("Teplota spaľ. komory K7", fmt(prev["teplota_k7_val"], "°C"))}
-            {td_row("Priemerný prietok", fmt(prev["priem_prietok_val"], "m³"), True)}
-        </table><br>
-        """
+        <table style='border-collapse:collapse;width:100%;max-width:600px;margin:20px 0;
+                      font-family:Arial,sans-serif;background:white;'>
+            <thead>
+                <tr>
+                    <th style='background:#8CC63F;color:white;padding:15px 20px;
+                        text-align:left;font-size:16px;font-weight:500;'>Parameter</th>
+                    <th style='background:#8CC63F;color:white;padding:15px 20px;
+                        text-align:right;font-size:16px;font-weight:500;'>Hodnota</th>
+                </tr>
+            </thead>
+            <tbody>
+                {td_row("Výroba", vyroba)}
+                {td_row("Kumulatívna výroba od začiatku mesiaca", vyroba_mesacna, True)}
+                {td_row("Priemerný hod. výkon kotla K6", priem_vykon_k6_str)}
+                {td_row("Priemerný hod. výkon kotla K7", priem_vykon_k7_str, True)}
+                {td_row("Priemerný hod. výkon spolu", priem_vykon_spolu_str)}
+                {td_row("Priem. výstupná teplota vody", priem_teplota, True)}
+                {td_row("Priem. vratná teplota vody", vratna_teplota)}
+                {td_row("Teplota spaľ. komory K6", teplota_k6, True)}
+                {td_row("Teplota spaľ. komory K7", teplota_k7)}
+                {td_row("Priemerný prietok", priem_prietok, True)}
+            </tbody>
+        </table>"""
 
         def td_row_stiepka(label, value, alt=False):
-            # Nastavíme biele pozadie pre bežné riadky a svetlosivé pre alternatívne
-            bg_color = "#f8f9fa" if alt else "#ffffff"
-            return f"<tr style='background: {bg_color};'><td style='padding:10px;border-left:4px solid #5A5A5A; color:#2B2B2B;'>{label}</td><td style='padding:10px;text-align:right;font-weight:bold; color:#2B2B2B;'>{value}</td></tr>"
+            bg = " style='background: #ffffff;'" if alt else " style='background: #f8f8f8;'"
+            return (f"<tr{bg}>"
+                    f"<td style='padding:15px 20px;border-left:4px solid #5A5A5A;"
+                    f"font-weight:500;width:60%;color:#2B2B2B;'>{label}</td>"
+                    f"<td style='padding:15px 20px;text-align:right;font-size:16px;"
+                    f"color:#2B2B2B;font-weight:bold;'>{value}</td>"
+                    f"</tr>")
 
         html_stiepka_info = f"""
-        <table style='width:100%; border-collapse:collapse; font-family:sans-serif; border:1px solid #ddd;'>
-            <tr style='background:#5A5A5A;color:white;'><th colspan='2' style='padding:10px;text-align:left;'>Informácie o zásobe štiepky</th></tr>
-            {td_row_stiepka("Počiatočný stav skladu", fmt(dodavky["pociatocny_stav"], "t"))}
-            {td_row_stiepka("Dodávka – Bodos", fmt(dodavky["bodos"], "t"), True)}
-            {td_row_stiepka("Dodávka – z dreva HBP", fmt(dodavky["hbp_drevo"], "t"))}
-            {td_row_stiepka("Dodávka – Recyklácia", fmt(dodavky["recyklacia"], "t"), True)}
-            {td_row_stiepka("Dodávka – Jankula", fmt(dodavky["jankula"], "t"))}
-            {td_row_stiepka("Spotreba od začiatku mesiaca", fmt(prev["stiepka_monthly_sum"], "t"), True)}
-            {td_row_stiepka(f"Zostatok na skládke k {vybrany_datum.strftime('%d.%m.%Y')}", fmt(zostatok_stiepky, "t"))}
-            {td_row_stiepka("Aktuálna denná spotreba", fmt(prev["aktualna_denna_spotreba"], "t"), True)}
-            {td_row_stiepka("Predpokladaná výdrž zásoby", "0 dní" if pocet_zostavajucich_dni <= 0 else f"{pocet_zostavajucich_dni} dní")}
-            {td_row_stiepka("Predpokladaný dátum vyčerpania", "Dnes" if pocet_zostavajucich_dni <= 0 else datum_vycerpania.strftime('%d.%m.%Y'), True)}
-        </table><br>
-        """
+        <table style='border-collapse:collapse;width:100%;max-width:600px;margin:20px 0;
+                      font-family:Arial,sans-serif;background:#f8f8f8;border:1px solid #ddd;'>
+            <thead>
+                <tr>
+                    <th style='background:#5A5A5A;color:white;padding:15px 20px;
+                        text-align:left;font-size:16px;font-weight:500;
+                        border-bottom:2px solid #ddd;' colspan="2">
+                        Informácie o zásobe štiepky</th>
+                </tr>
+            </thead>
+            <tbody>
+                {td_row_stiepka("Počiatočný stav skladu",
+                                 fmt(dodavky["pociatocny_stav"]) + " t")}
+                {td_row_stiepka("Dodávka – Bodos",         dodavka_bodos_str,      True)}
+                {td_row_stiepka("Dodávka – z dreva HBP",   dodavka_hbp_drevo_str)}
+                {td_row_stiepka("Dodávka – Recyklácia",     dodavka_recyklacia_str, True)}
+                {td_row_stiepka("Dodávka – Jankula",        dodavka_jankula_str)}
+                {td_row_stiepka("Spotreba od začiatku mesiaca",
+                                 spotreba_stiepky_mesacna,                          True)}
+                {td_row_stiepka(f"Zostatok na skládke k {vybrany_datum.strftime('%d.%m.%Y')}",
+                                 zostatok_stiepky_str)}
+                {td_row_stiepka("Aktuálna denná spotreba",
+                                 aktualna_denna_spotreba_str,                        True)}
+                {td_row_stiepka("Predpokladaná výdrž zásoby",
+                                 pocet_zostavajucich_dni_str)}
+                {td_row_stiepka("Predpokladaný dátum vyčerpania",
+                                 datum_vycerpania_str,                               True)}
+            </tbody>
+        </table><br>"""
 
     st.success("Report bol úspešne vygenerovaný! Skopíruj si ho nižšie.")
     st.divider()
@@ -327,8 +393,7 @@ if st.button("🚀 Generuj report", type="primary"):
 
     # --- GRAFY A TLAČIDLÁ NA STIAHNUTIE ---
     st.markdown("### Prevádzkové hodnoty")
-    fig_prevadzka = create_bar_chart(fmt(prev["vyroba_val"], "MWh"), fmt(prev["priem_teplota_val"], "°C"), 
-                                     fmt(prev["teplota_k6_val"], "°C"), fmt(prev["teplota_k7_val"], "°C"))
+    fig_prevadzka = create_bar_chart(vyroba, priem_teplota, teplota_k6, teplota_k7)
     st.pyplot(fig_prevadzka)
     st.download_button(
         label="💾 Stiahnuť graf prevádzkových hodnôt",
