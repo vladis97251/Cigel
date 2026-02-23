@@ -186,7 +186,6 @@ def create_bar_chart(vyroba, priem_teplota, teplota_k6, teplota_k7):
     teplota_k6_num = float(teplota_k6.split()[0].replace(',', '.'))
     teplota_k7_num = float(teplota_k7.split()[0].replace(',', '.'))
 
-    # Rozmery presne podľa pôvodného kódu 10x5
     fig, ax = plt.subplots(figsize=(10, 5))
     bars = ax.bar(['Výroba\n(MWh)', 'Priem. teplota\n(°C)', 'Teplota K6\n(°C)', 'Teplota K7\n(°C)'],
                   [vyroba_num, priem_teplota_num, teplota_k6_num, teplota_k7_num],
@@ -200,7 +199,6 @@ def create_bar_chart(vyroba, priem_teplota, teplota_k6, teplota_k7):
     return fig
 
 def create_line_chart(values, chart_title, line_color):
-    # Rozmery presne podľa pôvodného kódu 10x5
     fig, ax = plt.subplots(figsize=(10, 5))
     x = range(1, 25)
     ax.plot(x, values, marker='o', color=line_color, linewidth=1.5)
@@ -268,7 +266,7 @@ if st.button("🚀 Generuj report", type="primary"):
         pocet_h_k6, pocet_h_k7 = len(prev_h_k6), len(prev_h_k7)
         priem_vykon_spolu = ((priem_vykon_k6 * pocet_h_k6 + priem_vykon_k7 * pocet_h_k7) / max(pocet_h_k6, pocet_h_k7)) if (pocet_h_k6 + pocet_h_k7 > 0) else 0.0
 
-        # Formátovanie textov pre tabuľku (Presne podľa pôvodného kódu)
+        # Formátovanie textov
         def fmt(val, jednotka=""): return str(round(val, 2)).replace('.', ',') + (f" {jednotka}" if jednotka else "")
 
         vyroba          = fmt(prev["vyroba_val"], "MWh")
@@ -299,29 +297,24 @@ if st.button("🚀 Generuj report", type="primary"):
             datum_vycerpania_str        = datum_vycerpania.strftime('%d.%m.%Y')
             pocet_zostavajucich_dni_str = f"{pocet_zostavajucich_dni} dní"
 
-
         # ════════════════════════════════════════════════════════════════
-        # HTML GENEROVANIE - PRESNE PODĽA PÔVODNÉHO Cigeľ_4_0.py
+        # HTML GENEROVANIE - "Nezničiteľný" formát pre mobilné schránky
         # ════════════════════════════════════════════════════════════════
         def td_row(label, value, alt=False):
-            # Pridávame color:#2B2B2B kvoli čitateľnosti na mobiloch, inak formát 1:1
-            bg = " style='background: #f8f9fa;'" if alt else " style='background: #ffffff;'"
-            return (f"<tr{bg}>"
-                    f"<td style='padding:15px 20px;border-left:4px solid #8CC63F;"
-                    f"font-weight:500;color:#2B2B2B;'>{label}</td>"
-                    f"<td style='padding:15px 20px;text-align:right;font-size:16px;"
-                    f"color:#2B2B2B;font-weight:bold;'>{value}</td>"
+            # Používame starý atribút 'bgcolor' namiesto CSS background
+            bg_color = "#f8f9fa" if alt else "#ffffff"
+            return (f"<tr bgcolor='{bg_color}'>"
+                    f"<td style='padding:15px 20px; border-left:4px solid #8CC63F; font-weight:500; color:#2B2B2B;'>{label}</td>"
+                    f"<td align='right' style='padding:15px 20px; font-size:16px; color:#2B2B2B; font-weight:bold;'>{value}</td>"
                     f"</tr>")
 
+        # Pridané cellpadding a cellspacing priamo do tagu <table>
         html_table = f"""
-        <table style='border-collapse:collapse;width:100%;max-width:600px;margin:20px 0;
-                      font-family:Arial,sans-serif;background:white;'>
+        <table cellpadding="0" cellspacing="0" width="100%" style='max-width:600px; margin:20px 0; font-family:Arial,sans-serif; border-collapse:collapse;'>
             <thead>
-                <tr>
-                    <th style='background:#8CC63F;color:white;padding:15px 20px;
-                        text-align:left;font-size:16px;font-weight:500;'>Parameter</th>
-                    <th style='background:#8CC63F;color:white;padding:15px 20px;
-                        text-align:right;font-size:16px;font-weight:500;'>Hodnota</th>
+                <tr bgcolor='#8CC63F'>
+                    <th align='left' style='color:white; padding:15px 20px; font-size:16px; font-weight:500;'>Parameter</th>
+                    <th align='right' style='color:white; padding:15px 20px; font-size:16px; font-weight:500;'>Hodnota</th>
                 </tr>
             </thead>
             <tbody>
@@ -339,42 +332,31 @@ if st.button("🚀 Generuj report", type="primary"):
         </table>"""
 
         def td_row_stiepka(label, value, alt=False):
-            bg = " style='background: #ffffff;'" if alt else " style='background: #f8f8f8;'"
-            return (f"<tr{bg}>"
-                    f"<td style='padding:15px 20px;border-left:4px solid #5A5A5A;"
-                    f"font-weight:500;width:60%;color:#2B2B2B;'>{label}</td>"
-                    f"<td style='padding:15px 20px;text-align:right;font-size:16px;"
-                    f"color:#2B2B2B;font-weight:bold;'>{value}</td>"
+            bg_color = "#ffffff" if alt else "#f8f8f8"
+            return (f"<tr bgcolor='{bg_color}'>"
+                    f"<td width='60%' style='padding:15px 20px; border-left:4px solid #5A5A5A; font-weight:500; color:#2B2B2B;'>{label}</td>"
+                    f"<td align='right' style='padding:15px 20px; font-size:16px; color:#2B2B2B; font-weight:bold;'>{value}</td>"
                     f"</tr>")
 
         html_stiepka_info = f"""
-        <table style='border-collapse:collapse;width:100%;max-width:600px;margin:20px 0;
-                      font-family:Arial,sans-serif;background:#f8f8f8;border:1px solid #ddd;'>
+        <table cellpadding="0" cellspacing="0" width="100%" style='max-width:600px; margin:20px 0; font-family:Arial,sans-serif; border-collapse:collapse; border:1px solid #ddd;'>
             <thead>
-                <tr>
-                    <th style='background:#5A5A5A;color:white;padding:15px 20px;
-                        text-align:left;font-size:16px;font-weight:500;
-                        border-bottom:2px solid #ddd;' colspan="2">
+                <tr bgcolor='#5A5A5A'>
+                    <th align='left' colspan="2" style='color:white; padding:15px 20px; font-size:16px; font-weight:500; border-bottom:2px solid #ddd;'>
                         Informácie o zásobe štiepky</th>
                 </tr>
             </thead>
             <tbody>
-                {td_row_stiepka("Počiatočný stav skladu",
-                                 fmt(dodavky["pociatocny_stav"]) + " t")}
+                {td_row_stiepka("Počiatočný stav skladu", fmt(dodavky["pociatocny_stav"]) + " t")}
                 {td_row_stiepka("Dodávka – Bodos",         dodavka_bodos_str,      True)}
                 {td_row_stiepka("Dodávka – z dreva HBP",   dodavka_hbp_drevo_str)}
                 {td_row_stiepka("Dodávka – Recyklácia",     dodavka_recyklacia_str, True)}
                 {td_row_stiepka("Dodávka – Jankula",        dodavka_jankula_str)}
-                {td_row_stiepka("Spotreba od začiatku mesiaca",
-                                 spotreba_stiepky_mesacna,                          True)}
-                {td_row_stiepka(f"Zostatok na skládke k {vybrany_datum.strftime('%d.%m.%Y')}",
-                                 zostatok_stiepky_str)}
-                {td_row_stiepka("Aktuálna denná spotreba",
-                                 aktualna_denna_spotreba_str,                        True)}
-                {td_row_stiepka("Predpokladaná výdrž zásoby",
-                                 pocet_zostavajucich_dni_str)}
-                {td_row_stiepka("Predpokladaný dátum vyčerpania",
-                                 datum_vycerpania_str,                               True)}
+                {td_row_stiepka("Spotreba od začiatku mesiaca", spotreba_stiepky_mesacna, True)}
+                {td_row_stiepka(f"Zostatok na skládke k {vybrany_datum.strftime('%d.%m.%Y')}", zostatok_stiepky_str)}
+                {td_row_stiepka("Aktuálna denná spotreba", aktualna_denna_spotreba_str, True)}
+                {td_row_stiepka("Predpokladaná výdrž zásoby", pocet_zostavajucich_dni_str)}
+                {td_row_stiepka("Predpokladaný dátum vyčerpania", datum_vycerpania_str, True)}
             </tbody>
         </table><br>"""
 
