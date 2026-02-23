@@ -14,7 +14,8 @@ from reportlab.lib.units import mm
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage, KeepTogether
+    BaseDocTemplate, PageTemplate, Frame, NextPageTemplate, PageBreak,
+    Paragraph, Spacer, Table, TableStyle, Image as RLImage, KeepTogether
 )
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 from reportlab.pdfbase import pdfmetrics
@@ -271,11 +272,22 @@ def generuj_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
     """Vygeneruje kompletný PDF report do BytesIO bufferu."""
 
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buf, pagesize=A4,
-        leftMargin=15 * mm, rightMargin=15 * mm,
-        topMargin=15 * mm, bottomMargin=15 * mm,
-    )
+
+    MARGIN = 15 * mm
+    page_w, page_h = A4  # 210 x 297 mm
+
+    # Portrait frame (strana 1 – tabuľky)
+    portrait_frame = Frame(MARGIN, MARGIN, page_w - 2 * MARGIN, page_h - 2 * MARGIN, id='portrait')
+    # Landscape frame (strany 2-4 – grafy)
+    landscape_frame = Frame(MARGIN, MARGIN, page_h - 2 * MARGIN, page_w - 2 * MARGIN, id='landscape')
+
+    doc = BaseDocTemplate(buf, pagesize=A4,
+                          leftMargin=MARGIN, rightMargin=MARGIN,
+                          topMargin=MARGIN, bottomMargin=MARGIN)
+    doc.addPageTemplates([
+        PageTemplate(id='portrait', frames=[portrait_frame], pagesize=A4),
+        PageTemplate(id='landscape', frames=[landscape_frame], pagesize=(page_h, page_w)),
+    ])
 
     styles = getSampleStyleSheet()
 
@@ -415,22 +427,28 @@ def generuj_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
     story.append(t2)
     story.append(Spacer(1, 6 * mm))
 
-    # ── Grafy ──
+    # ── Prepnutie na landscape pre grafy ──
+    story.append(NextPageTemplate('landscape'))
+    story.append(PageBreak())
+
+    # Šírka obrázku v landscape (297 - 2×15 = 267 mm, necháme trochu rezervu)
+    LANDSCAPE_IMG_W = 260
+
     story.append(KeepTogether([
         Paragraph("Prevádzkové hodnoty", style_section),
-        _fig_to_rl_image(fig_prevadzka),
+        _fig_to_rl_image(fig_prevadzka, width_mm=LANDSCAPE_IMG_W),
     ]))
     story.append(Spacer(1, 4 * mm))
 
     story.append(KeepTogether([
         Paragraph("Výkon kotla K6", style_section),
-        _fig_to_rl_image(fig_k6),
+        _fig_to_rl_image(fig_k6, width_mm=LANDSCAPE_IMG_W),
     ]))
     story.append(Spacer(1, 4 * mm))
 
     story.append(KeepTogether([
         Paragraph("Výkon kotla K7", style_section),
-        _fig_to_rl_image(fig_k7),
+        _fig_to_rl_image(fig_k7, width_mm=LANDSCAPE_IMG_W),
     ]))
 
     # ── Poznámka a podpis ──
