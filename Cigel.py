@@ -431,25 +431,22 @@ def generuj_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
     story.append(NextPageTemplate('landscape'))
     story.append(PageBreak())
 
-    # Šírka obrázku v landscape (297 - 2×15 = 267 mm, necháme trochu rezervu)
-    LANDSCAPE_IMG_W = 260
+    # Šírka obrázku v landscape
+    LANDSCAPE_IMG_W = 250
 
-    story.append(KeepTogether([
-        Paragraph("Prevádzkové hodnoty", style_section),
-        _fig_to_rl_image(fig_prevadzka, width_mm=LANDSCAPE_IMG_W),
-    ]))
-    story.append(Spacer(1, 4 * mm))
+    # Graf 1 – Prevádzkové hodnoty
+    story.append(Paragraph("Prevádzkové hodnoty", style_section))
+    story.append(_fig_to_rl_image(fig_prevadzka, width_mm=LANDSCAPE_IMG_W))
 
-    story.append(KeepTogether([
-        Paragraph("Výkon kotla K6", style_section),
-        _fig_to_rl_image(fig_k6, width_mm=LANDSCAPE_IMG_W),
-    ]))
-    story.append(Spacer(1, 4 * mm))
+    # Graf 2 – Výkon K6
+    story.append(PageBreak())
+    story.append(Paragraph("Výkon kotla K6", style_section))
+    story.append(_fig_to_rl_image(fig_k6, width_mm=LANDSCAPE_IMG_W))
 
-    story.append(KeepTogether([
-        Paragraph("Výkon kotla K7", style_section),
-        _fig_to_rl_image(fig_k7, width_mm=LANDSCAPE_IMG_W),
-    ]))
+    # Graf 3 – Výkon K7 + poznámka + podpis
+    story.append(PageBreak())
+    story.append(Paragraph("Výkon kotla K7", style_section))
+    story.append(_fig_to_rl_image(fig_k7, width_mm=LANDSCAPE_IMG_W))
 
     # ── Poznámka a podpis ──
     story.append(Paragraph(
