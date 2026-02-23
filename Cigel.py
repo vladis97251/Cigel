@@ -197,7 +197,7 @@ def create_bar_chart(vyroba, priem_teplota, teplota_k6, teplota_k7):
     ax.grid(True, linestyle='--', alpha=0.3, axis='y')
     ax.set_title('Prevádzkové hodnoty', pad=20, fontsize=12, fontweight='bold')
     
-    fig.tight_layout() # Pridané pre lepšie zarovnanie
+    fig.subplots_adjust(left=0.12, right=0.95, top=0.88, bottom=0.20)
     return fig
 
 def create_line_chart(values, chart_title, line_color):
@@ -221,7 +221,7 @@ def create_line_chart(values, chart_title, line_color):
         if val is not None and val > 0:
             ax.text(x[i], val, f"{val:.1f}", ha='center', va='bottom', fontsize=8)
             
-    fig.tight_layout() # Pridané pre lepšie zarovnanie
+    fig.subplots_adjust(left=0.12, right=0.95, top=0.88, bottom=0.20)
     return fig
 
 # ════════════════════════════════════════════════════════════════
@@ -373,3 +373,4 @@ if st.button("🚀 Generuj report", type="primary"):
     Technik pre tepelné bilancie a chemickú kontrolu<br>
     HANDLOVSKÁ ENERGETIKA, s.r.o.
     """, unsafe_allow_html=True)
+
