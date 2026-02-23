@@ -1,0 +1,322 @@
+import datetime
+import calendar
+import math
+import pandas as pd
+import matplotlib.pyplot as plt
+import streamlit as st
+
+# ════════════════════════════════════════════════════════════════
+# KONFIGURÁCIA GOOGLE SHEETS – DODÁVKY ŠTIEPKY (BC = Baňa Cigeľ)
+# ════════════════════════════════════════════════════════════════
+DODAVKY_SHEET_ID = "1MB041dTwz-zfGg6u3wM1XpmrS_ynDe1J"
+
+DODAVKY_GIDS = {
+    1:  "2041175941", 2:  "996148749", 3:  "1052948469", 4:  "1742234642",
+    5:  "1522704266", 6:  "318756165", 7:  "174620779",  8:  "1714534272",
+    9:  "2141494448", 10: "953926717", 11: "1911464342", 12: "33776211",
+}
+
+COL_BODOS      = 1
+COL_HBP_DREVO  = 2
+COL_RECYKLACIA = 3
+COL_JANKULA    = 4
+COL_PC_STAV    = 1
+RIADOK_PC_STAV_IDX = 36
+
+# ════════════════════════════════════════════════════════════════
+# KONFIGURÁCIA GOOGLE SHEETS – PREVÁDZKOVÝ ZÁZNAM
+# ════════════════════════════════════════════════════════════════
+PREVADZKA_SHEETS = {
+    2: {
+        "sheet_id":   "1FXmRJwlRr6N2u_aZzuzjnn0HHgNEBTem64B1phXl_NM",
+        "mesiac_gid": "1425398749",
+        "denny_gid":  "759527346",
+    },
+    3: {
+        "sheet_id":   "1YSYltBW8uw3whOxNr3w8KLgvMkE-vqAV1cCeIn8Ymp0",
+        "mesiac_gid": "737601644",
+        "denny_gid":  None,
+    },
+    4: {
+        "sheet_id":   "1E2gxstdMVwj5X__5qrPuRJgkV5GtqLK6BtmmCc3GE00",
+        "mesiac_gid": "737601644",
+        "denny_gid":  None,
+    },
+}
+
+MC_VYROBA = 17; MC_STIEPKA = 9; MC_T_VYSTUP = 10; MC_T_VRATNA = 11
+MC_T_K6 = 4; MC_T_K7 = 23; MC_PRIETOK = 13
+DZ_K6 = 13; DZ_K7 = 30
+
+# ════════════════════════════════════════════════════════════════
+# POMOCNÉ FUNKCIE
+# ════════════════════════════════════════════════════════════════
+@st.cache_data(ttl=600) # Cache na 10 minút, aby sa appka načítavala rýchlejšie
+def nacitaj_gs(sheet_id: str, gid: str) -> pd.DataFrame | None:
+    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
+    try:
+        return pd.read_csv(url, header=None, dtype=str)
+    except Exception as e:
+        st.error(f"Chyba pri načítaní dát z Google Sheets (GID: {gid}): {e}")
+        return None
+
+def safe_float(df: pd.DataFrame, row_idx: int, col_idx: int) -> float | None:
+    try:
+        if row_idx >= len(df) or col_idx >= len(df.columns): return None
+        val = df.iloc[row_idx, col_idx]
+        if pd.isna(val) or str(val).strip() in ("", "-", "—"): return None
+        return float(str(val).replace(",", ".").replace("\xa0", "").strip())
+    except Exception:
+        return None
+
+def sum_column_do_dna(df: pd.DataFrame, col_idx: int, den: int) -> float:
+    total = 0.0
+    for row_idx in range(1, den + 1):
+        val = safe_float(df, row_idx, col_idx)
+        if val is not None and val > 0: total += val
+    return total
+
+def nacitaj_dodavky_stiepky(mesiac: int, den: int) -> dict:
+    vysledok = {"bodos": 0.0, "hbp_drevo": 0.0, "recyklacia": 0.0, "jankula": 0.0, "pociatocny_stav": 800.0}
+    gid = DODAVKY_GIDS.get(mesiac)
+    if not gid: return vysledok
+    df = nacitaj_gs(DODAVKY_SHEET_ID, gid)
+    if df is None: return vysledok
+
+    pc_stav = safe_float(df, RIADOK_PC_STAV_IDX, COL_PC_STAV)
+    if pc_stav is not None: vysledok["pociatocny_stav"] = pc_stav
+
+    vysledok["bodos"]      = sum_column_do_dna(df, COL_BODOS, den)
+    vysledok["hbp_drevo"]  = sum_column_do_dna(df, COL_HBP_DREVO, den)
+    vysledok["recyklacia"] = sum_column_do_dna(df, COL_RECYKLACIA, den)
+    vysledok["jankula"]    = sum_column_do_dna(df, COL_JANKULA, den)
+    return vysledok
+
+def nacitaj_prevadzkove_udaje(mesiac: int, den: int) -> dict | None:
+    cfg = PREVADZKA_SHEETS.get(mesiac)
+    if cfg is None: return None
+
+    df_m = nacitaj_gs(cfg["sheet_id"], cfg["mesiac_gid"])
+    if df_m is None: return None
+
+    ci = den + 4
+    udaje = {}
+    
+    def get_m(col_idx):
+        v = safe_float(df_m, ci, col_idx)
+        return v if v is not None else 0.0
+
+    udaje["vyroba_val"] = get_m(MC_VYROBA)
+    udaje["priem_teplota_val"] = get_m(MC_T_VYSTUP)
+    udaje["vratna_teplota_val"] = get_m(MC_T_VRATNA)
+    udaje["teplota_k6_val"] = max(0.0, get_m(MC_T_K6))
+    udaje["teplota_k7_val"] = max(0.0, get_m(MC_T_K7))
+    udaje["priem_prietok_val"] = get_m(MC_PRIETOK)
+
+    monthly_sum, stiepka_monthly_sum = 0.0, 0.0
+    for row_idx in range(5, ci + 1):
+        v_vyr = safe_float(df_m, row_idx, MC_VYROBA)
+        if v_vyr and v_vyr > 0: monthly_sum += v_vyr
+        v_st = safe_float(df_m, row_idx, MC_STIEPKA)
+        if v_st and v_st > 0: stiepka_monthly_sum += v_st
+
+    udaje["monthly_sum"] = monthly_sum
+    udaje["stiepka_monthly_sum"] = stiepka_monthly_sum
+
+    aktualna = safe_float(df_m, ci, MC_STIEPKA)
+    if not aktualna or aktualna <= 0:
+        aktualna = 0.0
+        for prev_day in range(1, 5):
+            if ci - prev_day >= 5:
+                prev_val = safe_float(df_m, ci - prev_day, MC_STIEPKA)
+                if prev_val and prev_val > 0:
+                    aktualna = prev_val
+                    break
+        if aktualna == 0.0 and (ci - 4) > 0:
+            aktualna = stiepka_monthly_sum / (ci - 4)
+    udaje["aktualna_denna_spotreba"] = aktualna
+
+    hours_data_k6, hours_data_k7 = [0.0] * 24, [0.0] * 24
+    if cfg.get("denny_gid"):
+        df_d = nacitaj_gs(cfg["sheet_id"], cfg["denny_gid"])
+        if df_d is not None:
+            start_idx = 5 + (den - 1) * 35
+            end_idx = start_idx + 24
+            def process_hourly(col_idx):
+                vals = [safe_float(df_d, ri, col_idx) or 0.0 for ri in range(start_idx, end_idx)]
+                return (vals + [0.0] * 24)[:24]
+            hours_data_k6 = process_hourly(DZ_K6)
+            hours_data_k7 = process_hourly(DZ_K7)
+
+    udaje["hours_data_k6"] = hours_data_k6
+    udaje["hours_data_k7"] = hours_data_k7
+    return udaje
+
+def vypocitaj_vydrz_zasoby(pociatocny_stav, spotreba_doteraz, aktualna_denna_spotreba, aktualny_datum):
+    zostatok = pociatocny_stav - spotreba_doteraz
+    if aktualna_denna_spotreba <= 0: return aktualny_datum + datetime.timedelta(days=9999), 9999
+    dni = math.floor(zostatok / aktualna_denna_spotreba)
+    return aktualny_datum + datetime.timedelta(days=dni), dni
+
+# ════════════════════════════════════════════════════════════════
+# GRAFY PRE STREAMLIT
+# ════════════════════════════════════════════════════════════════
+def create_bar_chart(vyroba, priem_teplota, teplota_k6, teplota_k7):
+    vyroba_num = float(vyroba.split()[0].replace(',', '.'))
+    priem_teplota_num = float(priem_teplota.split()[0].replace(',', '.'))
+    teplota_k6_num = float(teplota_k6.split()[0].replace(',', '.'))
+    teplota_k7_num = float(teplota_k7.split()[0].replace(',', '.'))
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    bars = ax.bar(['Výroba\n(MWh)', 'Priem. teplota\n(°C)', 'Teplota K6\n(°C)', 'Teplota K7\n(°C)'],
+                  [vyroba_num, priem_teplota_num, teplota_k6_num, teplota_k7_num],
+                  color=['#8CC63F', '#2B2B2B', '#5A5A5A', '#7A7A7A'])
+    
+    for bar in bars:
+        ax.text(bar.get_x() + bar.get_width()/2., bar.get_height(), f'{bar.get_height():.1f}', 
+                ha='center', va='bottom')
+    ax.grid(True, linestyle='--', alpha=0.3, axis='y')
+    ax.set_title('Prevádzkové hodnoty', pad=20, fontsize=12, fontweight='bold')
+    return fig
+
+def create_line_chart(values, chart_title, line_color):
+    fig, ax = plt.subplots(figsize=(8, 4))
+    x = range(1, 25)
+    ax.plot(x, values, marker='o', color=line_color, linewidth=1.5)
+    ax.axhline(y=3.0, color='red', linestyle='--', linewidth=2)
+    ax.text(24.5, 3.0, 'MAX výkon', color='red', fontweight='bold', va='center', ha='left', fontsize=10)
+    
+    ax.grid(True, linestyle='--', alpha=0.3)
+    ax.set_title(chart_title, pad=20, fontsize=12, fontweight='bold')
+    ax.set_xlabel("Hodina")
+    ax.set_ylabel("Výkon (MW)")
+    ax.set_xlim(1, 24)
+    ax.set_ylim(0, 4)
+    ax.set_xticks(range(1, 25))
+    
+    for i, val in enumerate(values):
+        if val is not None and val > 0:
+            ax.text(x[i], val, f"{val:.1f}", ha='center', va='bottom', fontsize=8)
+    return fig
+
+# ════════════════════════════════════════════════════════════════
+# STREAMLIT APLIKÁCIA
+# ════════════════════════════════════════════════════════════════
+st.set_page_config(page_title="Generátor reportov", page_icon="🏭", layout="centered")
+
+st.title("🏭 Prevádzkový report - Cigeľ")
+st.write("Vyber dátum a vygeneruj report, ktorý si môžeš skopírovať do mailu.")
+
+dnes = datetime.datetime.today().date()
+vcera = dnes - datetime.timedelta(days=1)
+
+vybrany_datum = st.date_input("Dátum reportu:", value=vcera, max_value=dnes)
+
+if st.button("🚀 Generuj report", type="primary"):
+    with st.spinner('Načítavam a spracúvam dáta z Google Sheets...'):
+        mesiac = vybrany_datum.month
+        den = vybrany_datum.day
+
+        # Načítanie dát
+        dodavky = nacitaj_dodavky_stiepky(mesiac, den)
+        prev = nacitaj_prevadzkove_udaje(mesiac, den)
+
+        if prev is None:
+            st.error(f"Mesiac {mesiac} nie je nakonfigurovaný. Doplň údaje do kódu.")
+            st.stop()
+
+        # Výpočty
+        celkove_dodavky = sum([dodavky["bodos"], dodavky["hbp_drevo"], dodavky["recyklacia"], dodavky["jankula"]])
+        datum_vycerpania, pocet_zostavajucich_dni = vypocitaj_vydrz_zasoby(
+            dodavky["pociatocny_stav"] + celkove_dodavky,
+            prev["stiepka_monthly_sum"],
+            prev["aktualna_denna_spotreba"],
+            vybrany_datum
+        )
+        zostatok_stiepky = dodavky["pociatocny_stav"] + celkove_dodavky - prev["stiepka_monthly_sum"]
+
+        hours_data_k6, hours_data_k7 = prev["hours_data_k6"], prev["hours_data_k7"]
+        for i in range(24):
+            if hours_data_k6[i] > 0 and hours_data_k7[i] > 0:
+                if hours_data_k6[i] > 3.3: hours_data_k6[i] /= 2
+                if hours_data_k7[i] > 3.3: hours_data_k7[i] /= 2
+
+        prev_h_k6 = [v for v in hours_data_k6 if v > 0]
+        prev_h_k7 = [v for v in hours_data_k7 if v > 0]
+        priem_vykon_k6 = sum(prev_h_k6) / len(prev_h_k6) if prev_h_k6 else 0.0
+        priem_vykon_k7 = sum(prev_h_k7) / len(prev_h_k7) if prev_h_k7 else 0.0
+        
+        pocet_h_k6, pocet_h_k7 = len(prev_h_k6), len(prev_h_k7)
+        priem_vykon_spolu = ((priem_vykon_k6 * pocet_h_k6 + priem_vykon_k7 * pocet_h_k7) / max(pocet_h_k6, pocet_h_k7)) if (pocet_h_k6 + pocet_h_k7 > 0) else 0.0
+
+        # Formátovanie
+        def fmt(val, jednotka=""): return str(round(val, 2)).replace('.', ',') + (f" {jednotka}" if jednotka else "")
+
+        # HTML Generovanie (Rovnaké ako predtým)
+        def td_row(label, value, alt=False):
+            bg = " style='background: #f8f9fa;'" if alt else ""
+            return f"<tr{bg}><td style='padding:10px;border-left:4px solid #8CC63F;'>{label}</td><td style='padding:10px;text-align:right;font-weight:bold;'>{value}</td></tr>"
+        
+        html_table = f"""
+        <table style='width:100%; border-collapse:collapse; font-family:sans-serif;'>
+            <tr style='background:#8CC63F;color:white;'><th style='padding:10px;text-align:left;'>Parameter</th><th style='padding:10px;text-align:right;'>Hodnota</th></tr>
+            {td_row("Výroba", fmt(prev["vyroba_val"], "MWh"))}
+            {td_row("Kumulatívna výroba", fmt(prev["monthly_sum"], "MWh"), True)}
+            {td_row("Priem. hod. výkon K6", fmt(priem_vykon_k6, f"MW ({pocet_h_k6}h)"))}
+            {td_row("Priem. hod. výkon K7", fmt(priem_vykon_k7, f"MW ({pocet_h_k7}h)"), True)}
+            {td_row("Priem. hod. výkon spolu", fmt(priem_vykon_spolu, "MW"))}
+            {td_row("Priem. výstupná teplota", fmt(prev["priem_teplota_val"], "°C"), True)}
+            {td_row("Priem. vratná teplota", fmt(prev["vratna_teplota_val"], "°C"))}
+            {td_row("Teplota spaľ. komory K6", fmt(prev["teplota_k6_val"], "°C"), True)}
+            {td_row("Teplota spaľ. komory K7", fmt(prev["teplota_k7_val"], "°C"))}
+            {td_row("Priemerný prietok", fmt(prev["priem_prietok_val"], "m³"), True)}
+        </table><br>
+        """
+
+        def td_row_stiepka(label, value, alt=False):
+            bg = " style='background:#f8f9fa;'" if alt else ""
+            return f"<tr{bg}><td style='padding:10px;border-left:4px solid #5A5A5A;'>{label}</td><td style='padding:10px;text-align:right;font-weight:bold;'>{value}</td></tr>"
+
+        html_stiepka_info = f"""
+        <table style='width:100%; border-collapse:collapse; font-family:sans-serif; border:1px solid #ddd;'>
+            <tr style='background:#5A5A5A;color:white;'><th colspan='2' style='padding:10px;text-align:left;'>Informácie o zásobe štiepky</th></tr>
+            {td_row_stiepka("Počiatočný stav skladu", fmt(dodavky["pociatocny_stav"], "t"))}
+            {td_row_stiepka("Dodávka – Bodos", fmt(dodavky["bodos"], "t"), True)}
+            {td_row_stiepka("Dodávka – z dreva HBP", fmt(dodavky["hbp_drevo"], "t"))}
+            {td_row_stiepka("Dodávka – Recyklácia", fmt(dodavky["recyklacia"], "t"), True)}
+            {td_row_stiepka("Dodávka – Jankula", fmt(dodavky["jankula"], "t"))}
+            {td_row_stiepka("Spotreba od začiatku mesiaca", fmt(prev["stiepka_monthly_sum"], "t"), True)}
+            {td_row_stiepka(f"Zostatok na skládke k {vybrany_datum.strftime('%d.%m.%Y')}", fmt(zostatok_stiepky, "t"))}
+            {td_row_stiepka("Aktuálna denná spotreba", fmt(prev["aktualna_denna_spotreba"], "t"), True)}
+            {td_row_stiepka("Predpokladaná výdrž zásoby", "0 dní" if pocet_zostavajucich_dni <= 0 else f"{pocet_zostavajucich_dni} dní")}
+            {td_row_stiepka("Predpokladaný dátum vyčerpania", "Dnes" if pocet_zostavajucich_dni <= 0 else datum_vycerpania.strftime('%d.%m.%Y'), True)}
+        </table><br>
+        """
+
+    st.success("Report bol úspešne vygenerovaný! Skopíruj si ho nižšie.")
+    st.divider()
+
+    # --- VÝSTUP PRE KOPÍROVANIE ---
+    st.markdown(f"Dobrý deň,\n\nZasielam Vám hodnoty z prevádzkového záznamu za deň {vybrany_datum.strftime('%d.%m.%Y')}:")
+    
+    st.markdown(html_table, unsafe_allow_html=True)
+    st.markdown(html_stiepka_info, unsafe_allow_html=True)
+
+    st.markdown("### Prevádzkové hodnoty")
+    st.pyplot(create_bar_chart(fmt(prev["vyroba_val"], "MWh"), fmt(prev["priem_teplota_val"], "°C"), 
+                               fmt(prev["teplota_k6_val"], "°C"), fmt(prev["teplota_k7_val"], "°C")))
+
+    st.markdown("### Výkon kotla K6")
+    st.pyplot(create_line_chart(hours_data_k6, "Výkon kotla K6", "#8CC63F"))
+
+    st.markdown("### Výkon kotla K7")
+    st.pyplot(create_line_chart(hours_data_k7, "Výkon kotla K7", "#2B2B2B"))
+
+    st.markdown("""
+    <p style="color:red;"><b>Dodávka štiepky od p. Ing. Jankulu je stanovená len odhadom. 
+    Skutočné dodané množstvo bude uvedené na faktúre.</b></p>
+    S pozdravom,
+    <br><br><b>Vladimír Hlucháň</b><br>
+    Technik pre tepelné bilancie a chemickú kontrolu<br>
+    HANDLOVSKÁ ENERGETIKA, s.r.o.
+    """, unsafe_allow_html=True)
