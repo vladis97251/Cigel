@@ -196,6 +196,8 @@ def create_bar_chart(vyroba, priem_teplota, teplota_k6, teplota_k7):
                 ha='center', va='bottom')
     ax.grid(True, linestyle='--', alpha=0.3, axis='y')
     ax.set_title('Prevádzkové hodnoty', pad=20, fontsize=12, fontweight='bold')
+    
+    fig.tight_layout() # Pridané pre lepšie zarovnanie
     return fig
 
 def create_line_chart(values, chart_title, line_color):
@@ -203,7 +205,9 @@ def create_line_chart(values, chart_title, line_color):
     x = range(1, 25)
     ax.plot(x, values, marker='o', color=line_color, linewidth=1.5)
     ax.axhline(y=3.0, color='red', linestyle='--', linewidth=2)
-    ax.text(24.5, 3.0, 'MAX výkon', color='red', fontweight='bold', va='center', ha='left', fontsize=10)
+    
+    # OPRAVA: Text sme presunuli dovnútra grafu, tesne nad čiaru (y=3.05) a na koniec osi X (x=24)
+    ax.text(24, 3.05, 'MAX výkon', color='red', fontweight='bold', va='bottom', ha='right', fontsize=10)
     
     ax.grid(True, linestyle='--', alpha=0.3)
     ax.set_title(chart_title, pad=20, fontsize=12, fontweight='bold')
@@ -216,6 +220,8 @@ def create_line_chart(values, chart_title, line_color):
     for i, val in enumerate(values):
         if val is not None and val > 0:
             ax.text(x[i], val, f"{val:.1f}", ha='center', va='bottom', fontsize=8)
+            
+    fig.tight_layout() # Pridané pre lepšie zarovnanie
     return fig
 
 # ════════════════════════════════════════════════════════════════
@@ -329,7 +335,6 @@ if st.button("🚀 Generuj report", type="primary"):
     st.markdown("### Prevádzkové hodnoty")
     fig_prevadzka = create_bar_chart(fmt(prev["vyroba_val"], "MWh"), fmt(prev["priem_teplota_val"], "°C"), 
                                      fmt(prev["teplota_k6_val"], "°C"), fmt(prev["teplota_k7_val"], "°C"))
-    # OPRAVA TU: Pridali sme use_container_width=True
     st.pyplot(fig_prevadzka, use_container_width=True)
     st.download_button(
         label="💾 Stiahnuť graf prevádzkových hodnôt",
@@ -340,7 +345,6 @@ if st.button("🚀 Generuj report", type="primary"):
 
     st.markdown("### Výkon kotla K6")
     fig_k6 = create_line_chart(hours_data_k6, "Výkon kotla K6", "#8CC63F")
-    # OPRAVA TU: Pridali sme use_container_width=True
     st.pyplot(fig_k6, use_container_width=True)
     st.download_button(
         label="💾 Stiahnuť graf K6",
@@ -351,7 +355,6 @@ if st.button("🚀 Generuj report", type="primary"):
 
     st.markdown("### Výkon kotla K7")
     fig_k7 = create_line_chart(hours_data_k7, "Výkon kotla K7", "#2B2B2B")
-    # OPRAVA TU: Pridali sme use_container_width=True
     st.pyplot(fig_k7, use_container_width=True)
     st.download_button(
         label="💾 Stiahnuť graf K7",
