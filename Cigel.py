@@ -329,7 +329,8 @@ if st.button("🚀 Generuj report", type="primary"):
     st.markdown("### Prevádzkové hodnoty")
     fig_prevadzka = create_bar_chart(fmt(prev["vyroba_val"], "MWh"), fmt(prev["priem_teplota_val"], "°C"), 
                                      fmt(prev["teplota_k6_val"], "°C"), fmt(prev["teplota_k7_val"], "°C"))
-    st.pyplot(fig_prevadzka)
+    # OPRAVA TU: Pridali sme use_container_width=True
+    st.pyplot(fig_prevadzka, use_container_width=True)
     st.download_button(
         label="💾 Stiahnuť graf prevádzkových hodnôt",
         data=graf_do_pamate(fig_prevadzka),
@@ -339,7 +340,8 @@ if st.button("🚀 Generuj report", type="primary"):
 
     st.markdown("### Výkon kotla K6")
     fig_k6 = create_line_chart(hours_data_k6, "Výkon kotla K6", "#8CC63F")
-    st.pyplot(fig_k6)
+    # OPRAVA TU: Pridali sme use_container_width=True
+    st.pyplot(fig_k6, use_container_width=True)
     st.download_button(
         label="💾 Stiahnuť graf K6",
         data=graf_do_pamate(fig_k6),
@@ -349,7 +351,8 @@ if st.button("🚀 Generuj report", type="primary"):
 
     st.markdown("### Výkon kotla K7")
     fig_k7 = create_line_chart(hours_data_k7, "Výkon kotla K7", "#2B2B2B")
-    st.pyplot(fig_k7)
+    # OPRAVA TU: Pridali sme use_container_width=True
+    st.pyplot(fig_k7, use_container_width=True)
     st.download_button(
         label="💾 Stiahnuť graf K7",
         data=graf_do_pamate(fig_k7),
@@ -367,4 +370,3 @@ if st.button("🚀 Generuj report", type="primary"):
     Technik pre tepelné bilancie a chemickú kontrolu<br>
     HANDLOVSKÁ ENERGETIKA, s.r.o.
     """, unsafe_allow_html=True)
-
