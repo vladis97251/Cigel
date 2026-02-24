@@ -2,6 +2,7 @@ import datetime
 import calendar
 import math
 import io
+import base64
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
@@ -29,9 +30,21 @@ try:
     pdfmetrics.registerFont(TTFont(_FONT_NAME, "DejaVuSans.ttf"))
     pdfmetrics.registerFont(TTFont(_FONT_NAME_BOLD, "DejaVuSans-Bold.ttf"))
 except Exception:
-    # Fallback – skús plnú cestu (bežnú na Linux/Streamlit Cloud)
     pdfmetrics.registerFont(TTFont(_FONT_NAME, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
     pdfmetrics.registerFont(TTFont(_FONT_NAME_BOLD, "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"))
+
+# ════════════════════════════════════════════════════════════════
+# LOGO – načítanie a base64 pre HTML
+# ════════════════════════════════════════════════════════════════
+LOGO_PATH = "logo.jpg"   # ← uisti sa, že logo.jpg je v rovnakom adresári ako skript
+
+def _get_logo_base64() -> str:
+    """Vráti base64 reťazec loga pre vkladanie do HTML."""
+    try:
+        with open(LOGO_PATH, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    except Exception:
+        return ""
 
 # ════════════════════════════════════════════════════════════════
 # NASTAVENIE STRÁNKY A DIZAJNU (Skrytie menu a pätky)
@@ -201,7 +214,6 @@ def vypocitaj_vydrz_zasoby(pociatocny_stav, spotreba_doteraz, aktualna_denna_spo
 # POMOCNÉ FUNKCIE PRE GRAFY A STIAHNUTIE
 # ════════════════════════════════════════════════════════════════
 def graf_do_pamate(fig):
-    """Uloží graf do pamäte pre tlačidlo na stiahnutie."""
     buf = io.BytesIO()
     fig.savefig(buf, format='png', bbox_inches='tight', dpi=150)
     buf.seek(0)
@@ -254,7 +266,6 @@ def create_line_chart(values, chart_title, line_color):
 # PDF GENEROVANIE
 # ════════════════════════════════════════════════════════════════
 def _fig_to_rl_image(fig, width_mm=170, max_height_mm=None):
-    """Konvertuje matplotlib figúru na reportlab Image objekt."""
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
     buf.seek(0)
@@ -267,7 +278,6 @@ def _fig_to_rl_image(fig, width_mm=170, max_height_mm=None):
     return RLImage(buf, width=target_w, height=target_h)
 
 def _get_pdf_styles():
-    """Spoločné štýly pre obe časti PDF."""
     styles = getSampleStyleSheet()
     s = {}
     s['title'] = ParagraphStyle(
@@ -307,7 +317,6 @@ def _build_portrait_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_
                          prev_aktualna_denna_spotreba, pocet_zostavajucich_dni, datum_vycerpania,
                          priem_vykon_k6, priem_vykon_k7, priem_vykon_spolu,
                          pocet_h_k6, pocet_h_k7, fmt):
-    """Strana 1 – tabuľky v portrait A4."""
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4,
                             leftMargin=15*mm, rightMargin=15*mm,
@@ -318,9 +327,41 @@ def _build_portrait_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_
     LIGHT_BG = colors.HexColor("#f8f9fa")
 
     story = []
-    story.append(Paragraph("Prevádzkový report – Cigeľ", s['title']))
-    story.append(Paragraph(
-        f"Prevádzkový záznam – hodnoty za {vybrany_datum.strftime('%d.%m.%Y')}", s['subtitle']))
+
+    # ── LOGO HLAVIČKA ──
+    try:
+        logo_img = RLImage(LOGO_PATH, width=40*mm, height=16*mm)
+        # Hlavička s logom vľavo a názvom vpravo
+        header_data = [[
+            logo_img,
+            Paragraph(
+                "Prevádzkový report – Cigeľ<br/>"
+                f"<font size='9' color='#666666'>"
+                f"Prevádzkový záznam – hodnoty za {vybrany_datum.strftime('%d.%m.%Y')}"
+                f"</font>",
+                ParagraphStyle(
+                    'HeaderText',
+                    fontName=_FONT_NAME_BOLD,
+                    fontSize=14,
+                    textColor=colors.HexColor("#2B2B2B"),
+                    alignment=TA_RIGHT,
+                )
+            )
+        ]]
+        header_table = Table(header_data, colWidths=[45*mm, 125*mm])
+        header_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+            ('LINEBELOW', (0, 0), (-1, 0), 1.5, GREEN),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 4*mm),
+        ]))
+        story.append(header_table)
+        story.append(Spacer(1, 4*mm))
+    except Exception:
+        # Fallback – bez loga
+        story.append(Paragraph("Prevádzkový report – Cigeľ", s['title']))
+        story.append(Paragraph(
+            f"Prevádzkový záznam – hodnoty za {vybrany_datum.strftime('%d.%m.%Y')}", s['subtitle']))
 
     # ── Tabuľka prevádzkových údajov ──
     story.append(Paragraph("Prevádzkové údaje", s['section']))
@@ -368,7 +409,7 @@ def _build_portrait_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_
         ["Dodávka – Jankula", fmt(dodavky["jankula"], "t")],
         ["Spotreba od začiatku mesiaca", fmt(prev["stiepka_monthly_sum"], "t")],
         [f"Zostatok na skládke k {vybrany_datum.strftime('%d.%m.%Y')}", fmt(zostatok_stiepky, "t")],
-        ["Aktuálna denná spotreba", fmt(prev_aktualna_denna_spotreba, "t")],
+        ["Aktuálna denná spotreba", fmt(prev["aktualna_denna_spotreba"], "t")],
         ["Predpokladaná výdrž zásoby", "0 dní" if pocet_zostavajucich_dni <= 0 else f"{pocet_zostavajucich_dni} dní"],
         ["Predpokladaný dátum vyčerpania", "Dnes" if pocet_zostavajucich_dni <= 0 else datum_vycerpania.strftime('%d.%m.%Y')],
     ]
@@ -395,28 +436,23 @@ def _build_portrait_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_
     return buf
 
 def _build_landscape_pdf(vybrany_datum, fig_prevadzka, fig_k6, fig_k7):
-    """Strany 2-4 – grafy v landscape A4."""
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=rl_landscape(A4),
                             leftMargin=15*mm, rightMargin=15*mm,
                             topMargin=15*mm, bottomMargin=15*mm)
     s = _get_pdf_styles()
-    # Landscape A4: 297×210, usable width = 267mm, usable height = 180mm
     IMG_W = 255
     IMG_MAX_H = 140
 
     story = []
 
-    # Graf 1
     story.append(Paragraph("Prevádzkové hodnoty", s['section']))
     story.append(_fig_to_rl_image(fig_prevadzka, width_mm=IMG_W, max_height_mm=IMG_MAX_H))
 
-    # Graf 2
     story.append(PageBreak())
     story.append(Paragraph("Výkon kotla K6", s['section']))
     story.append(_fig_to_rl_image(fig_k6, width_mm=IMG_W, max_height_mm=IMG_MAX_H))
 
-    # Graf 3 + poznámka + podpis
     story.append(PageBreak())
     story.append(Paragraph("Výkon kotla K7", s['section']))
     story.append(_fig_to_rl_image(fig_k7, width_mm=IMG_W, max_height_mm=IMG_MAX_H))
@@ -442,9 +478,6 @@ def generuj_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
                 priem_vykon_k6, priem_vykon_k7, priem_vykon_spolu,
                 pocet_h_k6, pocet_h_k7,
                 fig_prevadzka, fig_k6, fig_k7, fmt):
-    """Vygeneruje kompletný PDF: portrait tabuľky + landscape grafy, spojené cez pypdf."""
-
-    # 1. Vygeneruj obe časti
     portrait_buf = _build_portrait_pdf(
         vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
         prev_aktualna_denna_spotreba, pocet_zostavajucich_dni, datum_vycerpania,
@@ -453,7 +486,6 @@ def generuj_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
     )
     landscape_buf = _build_landscape_pdf(vybrany_datum, fig_prevadzka, fig_k6, fig_k7)
 
-    # 2. Spoj ich cez pypdf
     writer = PdfWriter()
     for page in PdfReader(portrait_buf).pages:
         writer.add_page(page)
@@ -468,8 +500,18 @@ def generuj_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
 # ════════════════════════════════════════════════════════════════
 # STREAMLIT APLIKÁCIA
 # ════════════════════════════════════════════════════════════════
-st.title("🏭 Prevádzkový report - Cigeľ")
-st.write("Vyber dátum a vygeneruj report, ktorý si môžeš skopírovať do mailu.")
+
+# ── LOGO v Streamlit hlavičke ──
+try:
+    col_logo, col_title = st.columns([1, 3])
+    with col_logo:
+        st.image(LOGO_PATH, width=140)
+    with col_title:
+        st.title("Prevádzkový report - Cigeľ")
+        st.write("Vyber dátum a vygeneruj report, ktorý si môžeš skopírovať do mailu.")
+except Exception:
+    st.title("🏭 Prevádzkový report - Cigeľ")
+    st.write("Vyber dátum a vygeneruj report, ktorý si môžeš skopírovať do mailu.")
 
 dnes = datetime.datetime.today().date()
 vcera = dnes - datetime.timedelta(days=1)
@@ -481,7 +523,6 @@ if st.button("🚀 Generuj report", type="primary"):
         mesiac = vybrany_datum.month
         den = vybrany_datum.day
 
-        # Načítanie dát
         dodavky = nacitaj_dodavky_stiepky(mesiac, den)
         prev = nacitaj_prevadzkove_udaje(mesiac, den)
 
@@ -489,7 +530,6 @@ if st.button("🚀 Generuj report", type="primary"):
             st.error(f"Mesiac {mesiac} nie je nakonfigurovaný. Doplň údaje do kódu.")
             st.stop()
 
-        # Výpočty
         celkove_dodavky = sum([dodavky["bodos"], dodavky["hbp_drevo"], dodavky["recyklacia"], dodavky["jankula"]])
         datum_vycerpania, pocet_zostavajucich_dni = vypocitaj_vydrz_zasoby(
             dodavky["pociatocny_stav"] + celkove_dodavky,
@@ -513,15 +553,22 @@ if st.button("🚀 Generuj report", type="primary"):
         pocet_h_k6, pocet_h_k7 = len(prev_h_k6), len(prev_h_k7)
         priem_vykon_spolu = ((priem_vykon_k6 * pocet_h_k6 + priem_vykon_k7 * pocet_h_k7) / max(pocet_h_k6, pocet_h_k7)) if (pocet_h_k6 + pocet_h_k7 > 0) else 0.0
 
-        # Formátovanie
         def fmt(val, jednotka=""): return str(round(val, 2)).replace('.', ',') + (f" {jednotka}" if jednotka else "")
 
-        # HTML Generovanie (Opravené farby pre tmavý režim na mobile)
+        # ── HTML e-mail s logom ──
+        logo_b64 = _get_logo_base64()
+        logo_html = (
+            f"<img src='data:image/jpeg;base64,{logo_b64}' "
+            f"style='height:40px; margin-bottom:8px;' alt='Handlovská Energetika'/>"
+            if logo_b64 else ""
+        )
+
         def td_row(label, value, alt=False):
             bg_color = "#f8f9fa" if alt else "#ffffff"
             return f"<tr style='background: {bg_color};'><td style='padding:10px;border-left:4px solid #8CC63F; color:#2B2B2B;'>{label}</td><td style='padding:10px;text-align:right;font-weight:bold; color:#2B2B2B;'>{value}</td></tr>"
         
         html_table = f"""
+        {logo_html}
         <table style='width:100%; border-collapse:collapse; font-family:sans-serif;'>
             <tr style='background:#8CC63F;color:white;'><th style='padding:10px;text-align:left;'>Parameter</th><th style='padding:10px;text-align:right;'>Hodnota</th></tr>
             {td_row("Výroba", fmt(prev["vyroba_val"], "MWh"))}
@@ -560,17 +607,14 @@ if st.button("🚀 Generuj report", type="primary"):
     st.success("Report bol úspešne vygenerovaný! Skopíruj si ho nižšie.")
     st.divider()
     
-    # --- PREDMET E-MAILU ---
     st.markdown("**Predmet e-mailu (skopíruj text nižšie):**")
     st.code(f"Prevádzkový záznam - hodnoty za {vybrany_datum.strftime('%d.%m.%Y')}", language="text")
     st.write("")
 
-    # --- TELO E-MAILU ---
     st.markdown(f"Dobrý deň,\n\nZasielam Vám hodnoty z prevádzkového záznamu za deň {vybrany_datum.strftime('%d.%m.%Y')}:")
     st.markdown(html_table, unsafe_allow_html=True)
     st.markdown(html_stiepka_info, unsafe_allow_html=True)
 
-    # --- GRAFY A TLAČIDLÁ NA STIAHNUTIE ---
     st.markdown("### Prevádzkové hodnoty")
     fig_prevadzka = create_bar_chart(fmt(prev["vyroba_val"], "MWh"), fmt(prev["priem_teplota_val"], "°C"), 
                                      fmt(prev["teplota_k6_val"], "°C"), fmt(prev["teplota_k7_val"], "°C"))
@@ -602,7 +646,6 @@ if st.button("🚀 Generuj report", type="primary"):
         mime="image/png"
     )
 
-    # ── PDF EXPORT ──
     st.divider()
     pdf_buf = generuj_pdf(
         vybrany_datum=vybrany_datum,
@@ -631,7 +674,6 @@ if st.button("🚀 Generuj report", type="primary"):
         type="primary",
     )
 
-    # --- ZÁVER E-MAILU ---
     st.markdown("""
     <br>
     <p style="color:red;"><b>Dodávka štiepky od p. Ing. Jankulu je stanovená len odhadom. 
