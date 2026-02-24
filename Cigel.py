@@ -687,5 +687,6 @@ if st.button("🚀 Generuj report", type="primary"):
     st.markdown("""
     <br>
     <p style="color:red;"><b>Dodávka štiepky od p. Ing. Jankulu je stanovená len odhadom. 
-    Skutočné dodané množstvo bude uvedené na faktúre.</b></p>
+    Skutočné dodané množstvo bude uvedené na faktúre.</b></p>)
+
 
