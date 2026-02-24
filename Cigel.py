@@ -233,7 +233,7 @@ def create_line_chart(values, chart_title, line_color):
     ax.plot(x, values, marker='o', color=line_color, linewidth=1.5)
     ax.axhline(y=3.0, color='red', linestyle='--', linewidth=2)
     
-    ax.text(24, 3.05, 'MAX výkon', color='red', fontweight='bold', va='bottom', ha='right', fontsize=10)
+    ax.text(24, 3.85, 'MAX výkon (3 MW)', color='red', fontweight='bold', va='top', ha='right', fontsize=10)
     
     ax.grid(True, linestyle='--', alpha=0.3)
     ax.set_title(chart_title, pad=20, fontsize=12, fontweight='bold')
