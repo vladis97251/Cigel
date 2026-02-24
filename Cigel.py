@@ -688,8 +688,7 @@ if st.button("🚀 Generuj report", type="primary"):
     <br>
     <p style="color:red;"><b>Dodávka štiepky od p. Ing. Jankulu je stanovená len odhadom. 
     Skutočné dodané množstvo bude uvedené na faktúre.</b></p>
-    S pozdravom,
-    <br><br><b>Vladimír Hlucháň</b><br>
-    Technik pre tepelné bilancie a chemickú kontrolu<br>
-    HANDLOVSKÁ ENERGETIKA, s.r.o.
+    
+        HANDLOVSKÁ ENERGETIKA, s.r.o.
     """, unsafe_allow_html=True)
+
