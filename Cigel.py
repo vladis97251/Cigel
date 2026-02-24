@@ -9,18 +9,18 @@ import streamlit as st
 # ════════════════════════════════════════════════════════════════
 # PDF EXPORT – reportlab
 # ════════════════════════════════════════════════════════════════
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape as rl_landscape
 from reportlab.lib.units import mm
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import (
     SimpleDocTemplate, PageBreak,
-    Paragraph, Spacer, Table, TableStyle, Image as RLImage, KeepTogether
+    Paragraph, Spacer, Table, TableStyle, Image as RLImage,
 )
-from reportlab.lib.utils import ImageReader
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from pypdf import PdfReader, PdfWriter
 
 # ── Registrácia fontu s podporou diakritiky ──
 _FONT_NAME = "DejaVuSans"
@@ -253,91 +253,77 @@ def create_line_chart(values, chart_title, line_color):
 # ════════════════════════════════════════════════════════════════
 # PDF GENEROVANIE
 # ════════════════════════════════════════════════════════════════
-def _fig_to_rl_image(fig, width_mm=170):
+def _fig_to_rl_image(fig, width_mm=170, max_height_mm=None):
     """Konvertuje matplotlib figúru na reportlab Image objekt."""
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
     buf.seek(0)
-    
-    # Prečítame skutočné rozmery vygenerovaného PNG, aby sme získali 100% presný pomer strán
-    img_reader = ImageReader(buf)
-    img_w, img_h = img_reader.getSize()
-    ratio = img_h / img_w
-    
-    # Zásadný krok: vrátime kurzor buffera na začiatok predtým, ako ho dáme ReportLabu
-    buf.seek(0)
-    
-    img = RLImage(buf, width=width_mm * mm, height=width_mm * mm * ratio)
-    return img
+    orig_w, orig_h = fig.get_size_inches()
+    ratio = orig_h / orig_w
+    target_w = width_mm * mm
+    target_h = target_w * ratio
+    if max_height_mm and target_h > max_height_mm * mm:
+        target_h = max_height_mm * mm
+    return RLImage(buf, width=target_w, height=target_h)
 
-def generuj_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
-                prev_aktualna_denna_spotreba, pocet_zostavajucich_dni, datum_vycerpania,
-                priem_vykon_k6, priem_vykon_k7, priem_vykon_spolu,
-                pocet_h_k6, pocet_h_k7,
-                fig_prevadzka, fig_k6, fig_k7, fmt):
-    """Vygeneruje kompletný PDF report do BytesIO bufferu."""
-
-    buf = io.BytesIO()
-    MARGIN = 15 * mm
-
-    # Obyčajný SimpleDocTemplate prevezme starosť o oddeľovanie strán
-    doc = SimpleDocTemplate(
-        buf, pagesize=A4,
-        leftMargin=MARGIN, rightMargin=MARGIN,
-        topMargin=MARGIN, bottomMargin=MARGIN
-    )
-
+def _get_pdf_styles():
+    """Spoločné štýly pre obe časti PDF."""
     styles = getSampleStyleSheet()
-
-    # ── Vlastné štýly ──
-    style_title = ParagraphStyle(
+    s = {}
+    s['title'] = ParagraphStyle(
         'ReportTitle', parent=styles['Title'],
         fontName=_FONT_NAME_BOLD,
         fontSize=16, spaceAfter=4 * mm, textColor=colors.HexColor("#2B2B2B"),
     )
-    style_subtitle = ParagraphStyle(
+    s['subtitle'] = ParagraphStyle(
         'ReportSubtitle', parent=styles['Normal'],
         fontName=_FONT_NAME,
         fontSize=10, spaceAfter=6 * mm, textColor=colors.HexColor("#666666"),
     )
-    style_section = ParagraphStyle(
+    s['section'] = ParagraphStyle(
         'SectionHeader', parent=styles['Heading2'],
         fontName=_FONT_NAME_BOLD,
         fontSize=12, spaceBefore=6 * mm, spaceAfter=3 * mm,
         textColor=colors.white, backColor=colors.HexColor("#8CC63F"),
         borderPadding=(4, 6, 4, 6),
     )
-    style_section_dark = ParagraphStyle(
-        'SectionHeaderDark', parent=style_section,
+    s['section_dark'] = ParagraphStyle(
+        'SectionHeaderDark', parent=s['section'],
         backColor=colors.HexColor("#5A5A5A"),
     )
-    style_note = ParagraphStyle(
+    s['note'] = ParagraphStyle(
         'NoteStyle', parent=styles['Normal'],
         fontName=_FONT_NAME_BOLD,
         fontSize=9, textColor=colors.red, spaceBefore=4 * mm,
     )
-    style_podpis = ParagraphStyle(
+    s['podpis'] = ParagraphStyle(
         'Podpis', parent=styles['Normal'],
         fontName=_FONT_NAME,
         fontSize=9, textColor=colors.HexColor("#333333"), spaceBefore=6 * mm,
     )
+    return s
 
+def _build_portrait_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
+                         prev_aktualna_denna_spotreba, pocet_zostavajucich_dni, datum_vycerpania,
+                         priem_vykon_k6, priem_vykon_k7, priem_vykon_spolu,
+                         pocet_h_k6, pocet_h_k7, fmt):
+    """Strana 1 – tabuľky v portrait A4."""
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            leftMargin=15*mm, rightMargin=15*mm,
+                            topMargin=15*mm, bottomMargin=15*mm)
+    s = _get_pdf_styles()
     GREEN = colors.HexColor("#8CC63F")
     GREY = colors.HexColor("#5A5A5A")
     LIGHT_BG = colors.HexColor("#f8f9fa")
 
     story = []
-
-    # ── Hlavička ──
-    story.append(Paragraph("Prevádzkový report – Cigeľ", style_title))
+    story.append(Paragraph("Prevádzkový report – Cigeľ", s['title']))
     story.append(Paragraph(
-        f"Prevádzkový záznam – hodnoty za {vybrany_datum.strftime('%d.%m.%Y')}",
-        style_subtitle,
-    ))
+        f"Prevádzkový záznam – hodnoty za {vybrany_datum.strftime('%d.%m.%Y')}", s['subtitle']))
 
     # ── Tabuľka prevádzkových údajov ──
-    story.append(Paragraph("Prevádzkové údaje", style_section))
-
+    story.append(Paragraph("Prevádzkové údaje", s['section']))
     prev_data = [
         ["Parameter", "Hodnota"],
         ["Výroba", fmt(prev["vyroba_val"], "MWh")],
@@ -351,38 +337,28 @@ def generuj_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
         ["Teplota spaľ. komory K7", fmt(prev["teplota_k7_val"], "°C")],
         ["Priemerný prietok", fmt(prev["priem_prietok_val"], "m³")],
     ]
-
-    col_widths = [100 * mm, 70 * mm]
+    col_widths = [100*mm, 70*mm]
     t1 = Table(prev_data, colWidths=col_widths)
-    t1_style = [
-        ('BACKGROUND', (0, 0), (-1, 0), GREEN),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTNAME',  (0, 0), (-1, 0), _FONT_NAME_BOLD),
-        ('FONTNAME',  (0, 1), (0, -1), _FONT_NAME),
-        ('FONTNAME',  (1, 1), (1, -1), _FONT_NAME_BOLD),
-        ('FONTSIZE',  (0, 0), (-1, -1), 9),
-        ('ALIGN',     (1, 0), (1, -1), 'RIGHT'),
-        ('VALIGN',    (0, 0), (-1, -1), 'MIDDLE'),
-        ('GRID',      (0, 0), (-1, -1), 0.5, colors.HexColor("#dddddd")),
-        ('TOPPADDING',    (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('LEFTPADDING',   (0, 0), (-1, -1), 6),
-        ('RIGHTPADDING',  (0, 0), (-1, -1), 6),
+    t1s = [
+        ('BACKGROUND', (0,0), (-1,0), GREEN), ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('FONTNAME', (0,0), (-1,0), _FONT_NAME_BOLD),
+        ('FONTNAME', (0,1), (0,-1), _FONT_NAME), ('FONTNAME', (1,1), (1,-1), _FONT_NAME_BOLD),
+        ('FONTSIZE', (0,0), (-1,-1), 9), ('ALIGN', (1,0), (1,-1), 'RIGHT'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#dddddd")),
+        ('TOPPADDING', (0,0), (-1,-1), 4), ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('LEFTPADDING', (0,0), (-1,-1), 6), ('RIGHTPADDING', (0,0), (-1,-1), 6),
     ]
     for i in range(1, len(prev_data)):
-        if i % 2 == 0:
-            t1_style.append(('BACKGROUND', (0, i), (-1, i), LIGHT_BG))
-    for i in range(1, len(prev_data)):
-        t1_style.append(('LINEBEFORESTROKEWIDTH', (0, i), (0, i), 3))
-        t1_style.append(('LINEBEFORECOLOR', (0, i), (0, i), GREEN))
-
-    t1.setStyle(TableStyle(t1_style))
+        if i % 2 == 0: t1s.append(('BACKGROUND', (0,i), (-1,i), LIGHT_BG))
+        t1s.append(('LINEBEFORESTROKEWIDTH', (0,i), (0,i), 3))
+        t1s.append(('LINEBEFORECOLOR', (0,i), (0,i), GREEN))
+    t1.setStyle(TableStyle(t1s))
     story.append(t1)
-    story.append(Spacer(1, 4 * mm))
+    story.append(Spacer(1, 4*mm))
 
     # ── Tabuľka štiepky ──
-    story.append(Paragraph("Informácie o zásobe štiepky", style_section_dark))
-
+    story.append(Paragraph("Informácie o zásobe štiepky", s['section_dark']))
     stiepka_data = [
         ["Parameter", "Hodnota"],
         ["Počiatočný stav skladu", fmt(dodavky["pociatocny_stav"], "t")],
@@ -396,71 +372,96 @@ def generuj_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
         ["Predpokladaná výdrž zásoby", "0 dní" if pocet_zostavajucich_dni <= 0 else f"{pocet_zostavajucich_dni} dní"],
         ["Predpokladaný dátum vyčerpania", "Dnes" if pocet_zostavajucich_dni <= 0 else datum_vycerpania.strftime('%d.%m.%Y')],
     ]
-
     t2 = Table(stiepka_data, colWidths=col_widths)
-    t2_style = [
-        ('BACKGROUND', (0, 0), (-1, 0), GREY),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTNAME',  (0, 0), (-1, 0), _FONT_NAME_BOLD),
-        ('FONTNAME',  (0, 1), (0, -1), _FONT_NAME),
-        ('FONTNAME',  (1, 1), (1, -1), _FONT_NAME_BOLD),
-        ('FONTSIZE',  (0, 0), (-1, -1), 9),
-        ('ALIGN',     (1, 0), (1, -1), 'RIGHT'),
-        ('VALIGN',    (0, 0), (-1, -1), 'MIDDLE'),
-        ('GRID',      (0, 0), (-1, -1), 0.5, colors.HexColor("#dddddd")),
-        ('TOPPADDING',    (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('LEFTPADDING',   (0, 0), (-1, -1), 6),
-        ('RIGHTPADDING',  (0, 0), (-1, -1), 6),
+    t2s = [
+        ('BACKGROUND', (0,0), (-1,0), GREY), ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('FONTNAME', (0,0), (-1,0), _FONT_NAME_BOLD),
+        ('FONTNAME', (0,1), (0,-1), _FONT_NAME), ('FONTNAME', (1,1), (1,-1), _FONT_NAME_BOLD),
+        ('FONTSIZE', (0,0), (-1,-1), 9), ('ALIGN', (1,0), (1,-1), 'RIGHT'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#dddddd")),
+        ('TOPPADDING', (0,0), (-1,-1), 4), ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('LEFTPADDING', (0,0), (-1,-1), 6), ('RIGHTPADDING', (0,0), (-1,-1), 6),
     ]
     for i in range(1, len(stiepka_data)):
-        if i % 2 == 0:
-            t2_style.append(('BACKGROUND', (0, i), (-1, i), LIGHT_BG))
-        t2_style.append(('LINEBEFORESTROKEWIDTH', (0, i), (0, i), 3))
-        t2_style.append(('LINEBEFORECOLOR', (0, i), (0, i), GREY))
-
-    t2.setStyle(TableStyle(t2_style))
+        if i % 2 == 0: t2s.append(('BACKGROUND', (0,i), (-1,i), LIGHT_BG))
+        t2s.append(('LINEBEFORESTROKEWIDTH', (0,i), (0,i), 3))
+        t2s.append(('LINEBEFORECOLOR', (0,i), (0,i), GREY))
+    t2.setStyle(TableStyle(t2s))
     story.append(t2)
-    story.append(Spacer(1, 6 * mm))
 
-    # ── Grafy na novej strane (všetko na výšku) ──
-    story.append(PageBreak())
+    doc.build(story)
+    buf.seek(0)
+    return buf
 
-    # Maximálna šírka obrázku, aby pekne sadol na A4 s 15mm okrajmi
-    IMG_W = 175
+def _build_landscape_pdf(vybrany_datum, fig_prevadzka, fig_k6, fig_k7):
+    """Strany 2-4 – grafy v landscape A4."""
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=rl_landscape(A4),
+                            leftMargin=15*mm, rightMargin=15*mm,
+                            topMargin=15*mm, bottomMargin=15*mm)
+    s = _get_pdf_styles()
+    # Landscape A4: 297×210, usable width = 267mm, usable height = 180mm
+    IMG_W = 255
+    IMG_MAX_H = 140
+
+    story = []
 
     # Graf 1
-    story.append(Paragraph("Prevádzkové hodnoty", style_section))
-    story.append(_fig_to_rl_image(fig_prevadzka, width_mm=IMG_W))
-    story.append(Spacer(1, 5 * mm))
+    story.append(Paragraph("Prevádzkové hodnoty", s['section']))
+    story.append(_fig_to_rl_image(fig_prevadzka, width_mm=IMG_W, max_height_mm=IMG_MAX_H))
 
     # Graf 2
-    story.append(Paragraph("Výkon kotla K6", style_section))
-    story.append(_fig_to_rl_image(fig_k6, width_mm=IMG_W))
-    story.append(Spacer(1, 5 * mm))
+    story.append(PageBreak())
+    story.append(Paragraph("Výkon kotla K6", s['section']))
+    story.append(_fig_to_rl_image(fig_k6, width_mm=IMG_W, max_height_mm=IMG_MAX_H))
 
-    # Graf 3
-    # ReportLab tu sám prehodí stranu, ak sa graf K7 nezmestí k predošlému.
-    story.append(Paragraph("Výkon kotla K7", style_section))
-    story.append(_fig_to_rl_image(fig_k7, width_mm=IMG_W))
-    story.append(Spacer(1, 8 * mm))
-
-    # ── Poznámka a podpis ──
+    # Graf 3 + poznámka + podpis
+    story.append(PageBreak())
+    story.append(Paragraph("Výkon kotla K7", s['section']))
+    story.append(_fig_to_rl_image(fig_k7, width_mm=IMG_W, max_height_mm=IMG_MAX_H))
     story.append(Paragraph(
         "<b>Dodávka štiepky od p. Ing. Jankulu je stanovená len odhadom. "
         "Skutočné dodané množstvo bude uvedené na faktúre.</b>",
-        style_note,
+        s['note'],
     ))
     story.append(Paragraph(
         "S pozdravom,<br/><br/>"
         "<b>Vladimír Hlucháň</b><br/>"
         "Technik pre tepelné bilancie a chemickú kontrolu<br/>"
         "HANDLOVSKÁ ENERGETIKA, s.r.o.",
-        style_podpis,
+        s['podpis'],
     ))
 
-    # Vygenerovanie dokumentu!
     doc.build(story)
+    buf.seek(0)
+    return buf
+
+def generuj_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
+                prev_aktualna_denna_spotreba, pocet_zostavajucich_dni, datum_vycerpania,
+                priem_vykon_k6, priem_vykon_k7, priem_vykon_spolu,
+                pocet_h_k6, pocet_h_k7,
+                fig_prevadzka, fig_k6, fig_k7, fmt):
+    """Vygeneruje kompletný PDF: portrait tabuľky + landscape grafy, spojené cez pypdf."""
+
+    # 1. Vygeneruj obe časti
+    portrait_buf = _build_portrait_pdf(
+        vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
+        prev_aktualna_denna_spotreba, pocet_zostavajucich_dni, datum_vycerpania,
+        priem_vykon_k6, priem_vykon_k7, priem_vykon_spolu,
+        pocet_h_k6, pocet_h_k7, fmt,
+    )
+    landscape_buf = _build_landscape_pdf(vybrany_datum, fig_prevadzka, fig_k6, fig_k7)
+
+    # 2. Spoj ich cez pypdf
+    writer = PdfWriter()
+    for page in PdfReader(portrait_buf).pages:
+        writer.add_page(page)
+    for page in PdfReader(landscape_buf).pages:
+        writer.add_page(page)
+
+    buf = io.BytesIO()
+    writer.write(buf)
     buf.seek(0)
     return buf
 
