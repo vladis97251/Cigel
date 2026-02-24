@@ -461,13 +461,6 @@ def _build_landscape_pdf(vybrany_datum, fig_prevadzka, fig_k6, fig_k7):
         "Skutočné dodané množstvo bude uvedené na faktúre.</b>",
         s['note'],
     ))
-    story.append(Paragraph(
-        "S pozdravom,<br/><br/>"
-        "<b>Vladimír Hlucháň</b><br/>"
-        "Technik pre tepelné bilancie a chemickú kontrolu<br/>"
-        "HANDLOVSKÁ ENERGETIKA, s.r.o.",
-        s['podpis'],
-    ))
 
     doc.build(story)
     buf.seek(0)
@@ -526,7 +519,7 @@ else:
 dnes = datetime.datetime.today().date()
 vcera = dnes - datetime.timedelta(days=1)
 
-vybrany_datum = st.date_input("Dátum reportu:", value=vcera, max_value=dnes, format="DD/MM/YYYY")
+vybrany_datum = st.date_input("Dátum reportu:", value=vcera, max_value=vcera, format="DD/MM/YYYY")
 
 if st.button("🚀 Generuj report", type="primary"):
     with st.spinner('Načítavam a spracúvam dáta z Google Sheets...'):
