@@ -502,14 +502,24 @@ def generuj_pdf(vybrany_datum, prev, dodavky, celkove_dodavky, zostatok_stiepky,
 # ════════════════════════════════════════════════════════════════
 
 # ── LOGO v Streamlit hlavičke ──
-try:
-    col_logo, col_title = st.columns([1, 3])
-    with col_logo:
-        st.image(LOGO_PATH, width=140)
-    with col_title:
-        st.title("Prevádzkový report - Cigeľ")
-        st.write("Vyber dátum a vygeneruj report, ktorý si môžeš skopírovať do mailu.")
-except Exception:
+logo_b64_header = _get_logo_base64()
+if logo_b64_header:
+    st.markdown(f"""
+    <div style="display:flex; align-items:center; gap:20px; margin-bottom:10px;">
+        <img src="data:image/jpeg;base64,{logo_b64_header}"
+             style="height:60px; width:auto; object-fit:contain; flex-shrink:0;" 
+             alt="Handlovská Energetika"/>
+        <div>
+            <div style="font-size:2rem; font-weight:700; line-height:1.2; color:inherit;">
+                Prevádzkový report - Cigeľ
+            </div>
+            <div style="font-size:1rem; color:#888; margin-top:4px;">
+                Vyber dátum a vygeneruj report, ktorý si môžeš skopírovať do mailu.
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+else:
     st.title("🏭 Prevádzkový report - Cigeľ")
     st.write("Vyber dátum a vygeneruj report, ktorý si môžeš skopírovať do mailu.")
 
