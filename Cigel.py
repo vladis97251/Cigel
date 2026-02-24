@@ -688,7 +688,4 @@ if st.button("🚀 Generuj report", type="primary"):
     <br>
     <p style="color:red;"><b>Dodávka štiepky od p. Ing. Jankulu je stanovená len odhadom. 
     Skutočné dodané množstvo bude uvedené na faktúre.</b></p>
-    
-        HANDLOVSKÁ ENERGETIKA, s.r.o.
-    """, unsafe_allow_html=True)
 
