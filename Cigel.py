@@ -86,8 +86,8 @@ PREVADZKA_SHEETS = {
     },
     3: {
         "sheet_id":   "1YSYltBW8uw3whOxNr3w8KLgvMkE-vqAV1cCeIn8Ymp0",
-        "mesiac_gid": "737601644",
-        "denny_gid":  None,
+        "mesiac_gid": "1081996655",
+        "denny_gid":  "737601644",
     },
     4: {
         "sheet_id":   "1E2gxstdMVwj5X__5qrPuRJgkV5GtqLK6BtmmCc3GE00",
@@ -682,5 +682,6 @@ if st.button("🚀 Generuj report", type="primary"):
     <p style="color:red;"><b>Dodávka štiepky od p. Ing. Jankulu je stanovená len odhadom. 
     Skutočné dodané množstvo bude uvedené na faktúre.</b></p>
     """, unsafe_allow_html=True)
+
 
 
