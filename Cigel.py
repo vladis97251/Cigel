@@ -31,8 +31,12 @@ try:
     pdfmetrics.registerFont(TTFont(_FONT_NAME, "DejaVuSans.ttf"))
     pdfmetrics.registerFont(TTFont(_FONT_NAME_BOLD, "DejaVuSans-Bold.ttf"))
 except Exception:
-    pdfmetrics.registerFont(TTFont(_FONT_NAME, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
-    pdfmetrics.registerFont(TTFont(_FONT_NAME_BOLD, "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"))
+    try:
+        pdfmetrics.registerFont(TTFont(_FONT_NAME, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
+        pdfmetrics.registerFont(TTFont(_FONT_NAME_BOLD, "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"))
+    except Exception as _font_err:
+        st.error(f"❌ Nepodarilo sa načítať font DejaVuSans: {_font_err}\n\nUisti sa, že DejaVuSans.ttf je dostupný.")
+        st.stop()
 
 # ════════════════════════════════════════════════════════════════
 # LOGO – načítanie a base64 pre HTML
@@ -66,17 +70,23 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 # IDs sú načítavané zo Streamlit Secrets alebo z env. premenných.
 # Šablóna: .streamlit/secrets.toml.example
 # ════════════════════════════════════════════════════════════════
-def _secret(key: str, default: str) -> str:
-    """Načíta hodnotu zo st.secrets, potom z env. premennej, inak vráti default."""
+def _secret(key: str) -> str:
+    """Načíta hodnotu zo st.secrets alebo z env. premennej. Ak chýba, vyhodí chybu."""
     try:
         val = st.secrets.get(key)
         if val:
             return str(val)
     except Exception:
         pass
-    return os.environ.get(key, default)
+    val = os.environ.get(key)
+    if val:
+        return val
+    st.error(f"❌ Chýba povinná konfigurácia: `{key}`\n\n"
+             f"Nastav ju v `.streamlit/secrets.toml` alebo ako env. premennú.\n"
+             f"Šablóna: `.streamlit/secrets.toml.example`")
+    st.stop()
 
-DODAVKY_SHEET_ID = _secret("DODAVKY_SHEET_ID", "1MB041dTwz-zfGg6u3wM1XpmrS_ynDe1J")
+DODAVKY_SHEET_ID = _secret("DODAVKY_SHEET_ID")
 
 DODAVKY_GIDS = {
     1:  "2041175941", 2:  "996148749", 3:  "1052948469", 4:  "1742234642",
@@ -93,17 +103,17 @@ RIADOK_PC_STAV_IDX = 36
 
 PREVADZKA_SHEETS = {
     2: {
-        "sheet_id":   _secret("PREVADZKA_2_SHEET_ID", "1FXmRJwlRr6N2u_aZzuzjnn0HHgNEBTem64B1phXl_NM"),
+        "sheet_id":   _secret("PREVADZKA_2_SHEET_ID"),
         "mesiac_gid": "1425398749",
         "denny_gid":  "759527346",
     },
     3: {
-        "sheet_id":   _secret("PREVADZKA_3_SHEET_ID", "1YSYltBW8uw3whOxNr3w8KLgvMkE-vqAV1cCeIn8Ymp0"),
+        "sheet_id":   _secret("PREVADZKA_3_SHEET_ID"),
         "mesiac_gid": "1081996655",
         "denny_gid":  "737601644",
     },
     4: {
-        "sheet_id":   _secret("PREVADZKA_4_SHEET_ID", "1E2gxstdMVwj5X__5qrPuRJgkV5GtqLK6BtmmCc3GE00"),
+        "sheet_id":   _secret("PREVADZKA_4_SHEET_ID"),
         "mesiac_gid": "737601644",
         "denny_gid":  None,
     },
@@ -220,6 +230,9 @@ def nacitaj_prevadzkove_udaje(mesiac: int, den: int) -> dict | None:
     udaje["hours_data_k6"] = hours_data_k6
     udaje["hours_data_k7"] = hours_data_k7
     return udaje
+
+def fmt(val, jednotka=""):
+    return str(round(val, 2)).replace('.', ',') + (f" {jednotka}" if jednotka else "")
 
 def vypocitaj_vydrz_zasoby(pociatocny_stav, spotreba_doteraz, aktualna_denna_spotreba, aktualny_datum):
     zostatok = pociatocny_stav - spotreba_doteraz
@@ -542,7 +555,8 @@ if st.button("🚀 Generuj report", type="primary"):
         prev = nacitaj_prevadzkove_udaje(mesiac, den)
 
         if prev is None:
-            st.error(f"Mesiac {mesiac} nie je nakonfigurovaný. Doplň údaje do kódu.")
+            st.error(f"❌ Mesiac {mesiac} nie je nakonfigurovaný v `PREVADZKA_SHEETS`. "
+                     f"Doplň `sheet_id` a GIDs pre tento mesiac do konfigurácie.")
             st.stop()
 
         celkove_dodavky = sum([dodavky["bodos"], dodavky["hbp_drevo"], dodavky["recyklacia"], dodavky["jankula"]])
@@ -568,10 +582,8 @@ if st.button("🚀 Generuj report", type="primary"):
         pocet_h_k6, pocet_h_k7 = len(prev_h_k6), len(prev_h_k7)
         priem_vykon_spolu = ((priem_vykon_k6 * pocet_h_k6 + priem_vykon_k7 * pocet_h_k7) / (pocet_h_k6 + pocet_h_k7)) if (pocet_h_k6 + pocet_h_k7 > 0) else 0.0
 
-        def fmt(val, jednotka=""): return str(round(val, 2)).replace('.', ',') + (f" {jednotka}" if jednotka else "")
-
         # ── HTML e-mail s logom ──
-        logo_b64 = _get_logo_base64()
+        logo_b64 = logo_b64_header
         logo_html = (
             f"<img src='data:image/jpeg;base64,{logo_b64}' "
             f"style='height:40px; margin-bottom:8px;' alt='Handlovská Energetika'/>"
