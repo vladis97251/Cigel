@@ -68,7 +68,10 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 # ════════════════════════════════════════════════════════════════
 # KONFIGURÁCIA GOOGLE SHEETS
 # IDs sú načítavané zo Streamlit Secrets alebo z env. premenných.
-# Šablóna: .streamlit/secrets.toml.example
+# Formát secrets.toml:
+#   DODAVKY_SHEET_ID = "..."
+#   [prevadzka_2]
+#   sheet_id = "..."
 # ════════════════════════════════════════════════════════════════
 def _secret(key: str) -> str:
     """Načíta hodnotu zo st.secrets alebo z env. premennej. Ak chýba, vyhodí chybu."""
@@ -84,6 +87,23 @@ def _secret(key: str) -> str:
     st.error(f"❌ Chýba povinná konfigurácia: `{key}`\n\n"
              f"Nastav ju v `.streamlit/secrets.toml` alebo ako env. premennú.\n"
              f"Šablóna: `.streamlit/secrets.toml.example`")
+    st.stop()
+
+def _secret_nested(section: str, key: str) -> str:
+    """Načíta hodnotu z nested sekcie st.secrets (napr. [prevadzka_2] → sheet_id)."""
+    try:
+        val = st.secrets.get(section, {}).get(key)
+        if val:
+            return str(val)
+    except Exception:
+        pass
+    env_key = f"{section.upper()}_{key.upper()}"
+    val = os.environ.get(env_key)
+    if val:
+        return val
+    st.error(f"❌ Chýba povinná konfigurácia: sekcia `[{section}]`, kľúč `{key}`\n\n"
+             f"Nastav ju v `.streamlit/secrets.toml`:\n"
+             f"```\n[{section}]\n{key} = \"...\"\n```")
     st.stop()
 
 DODAVKY_SHEET_ID = _secret("DODAVKY_SHEET_ID")
@@ -103,17 +123,17 @@ RIADOK_PC_STAV_IDX = 36
 
 PREVADZKA_SHEETS = {
     2: {
-        "sheet_id":   _secret("PREVADZKA_2_SHEET_ID"),
+        "sheet_id":   _secret_nested("prevadzka_2", "sheet_id"),
         "mesiac_gid": "1425398749",
         "denny_gid":  "759527346",
     },
     3: {
-        "sheet_id":   _secret("PREVADZKA_3_SHEET_ID"),
+        "sheet_id":   _secret_nested("prevadzka_3", "sheet_id"),
         "mesiac_gid": "1081996655",
         "denny_gid":  "737601644",
     },
     4: {
-        "sheet_id":   _secret("PREVADZKA_4_SHEET_ID"),
+        "sheet_id":   _secret_nested("prevadzka_4", "sheet_id"),
         "mesiac_gid": "737601644",
         "denny_gid":  None,
     },
