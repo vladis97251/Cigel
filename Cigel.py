@@ -66,17 +66,23 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 # IDs sú načítavané zo Streamlit Secrets alebo z env. premenných.
 # Šablóna: .streamlit/secrets.toml.example
 # ════════════════════════════════════════════════════════════════
-def _secret(key: str, default: str) -> str:
-    """Načíta hodnotu zo st.secrets, potom z env. premennej, inak vráti default."""
+def _secret(key: str) -> str:
+    """Načíta hodnotu zo st.secrets alebo z env. premennej. Ak chýba, vyhodí chybu."""
     try:
         val = st.secrets.get(key)
         if val:
             return str(val)
     except Exception:
         pass
-    return os.environ.get(key, default)
+    val = os.environ.get(key)
+    if val:
+        return val
+    st.error(f"❌ Chýba povinná konfigurácia: `{key}`\n\n"
+             f"Nastav ju v `.streamlit/secrets.toml` alebo ako env. premennú.\n"
+             f"Šablóna: `.streamlit/secrets.toml.example`")
+    st.stop()
 
-DODAVKY_SHEET_ID = _secret("DODAVKY_SHEET_ID", "1MB041dTwz-zfGg6u3wM1XpmrS_ynDe1J")
+DODAVKY_SHEET_ID = _secret("DODAVKY_SHEET_ID")
 
 DODAVKY_GIDS = {
     1:  "2041175941", 2:  "996148749", 3:  "1052948469", 4:  "1742234642",
@@ -93,17 +99,17 @@ RIADOK_PC_STAV_IDX = 36
 
 PREVADZKA_SHEETS = {
     2: {
-        "sheet_id":   _secret("PREVADZKA_2_SHEET_ID", "1FXmRJwlRr6N2u_aZzuzjnn0HHgNEBTem64B1phXl_NM"),
+        "sheet_id":   _secret("PREVADZKA_2_SHEET_ID"),
         "mesiac_gid": "1425398749",
         "denny_gid":  "759527346",
     },
     3: {
-        "sheet_id":   _secret("PREVADZKA_3_SHEET_ID", "1YSYltBW8uw3whOxNr3w8KLgvMkE-vqAV1cCeIn8Ymp0"),
+        "sheet_id":   _secret("PREVADZKA_3_SHEET_ID"),
         "mesiac_gid": "1081996655",
         "denny_gid":  "737601644",
     },
     4: {
-        "sheet_id":   _secret("PREVADZKA_4_SHEET_ID", "1E2gxstdMVwj5X__5qrPuRJgkV5GtqLK6BtmmCc3GE00"),
+        "sheet_id":   _secret("PREVADZKA_4_SHEET_ID"),
         "mesiac_gid": "737601644",
         "denny_gid":  None,
     },
