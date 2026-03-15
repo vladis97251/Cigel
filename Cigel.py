@@ -3,6 +3,7 @@ import calendar
 import math
 import io
 import base64
+import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
@@ -62,8 +63,20 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # ════════════════════════════════════════════════════════════════
 # KONFIGURÁCIA GOOGLE SHEETS
+# IDs sú načítavané zo Streamlit Secrets alebo z env. premenných.
+# Šablóna: .streamlit/secrets.toml.example
 # ════════════════════════════════════════════════════════════════
-DODAVKY_SHEET_ID = "1MB041dTwz-zfGg6u3wM1XpmrS_ynDe1J"
+def _secret(key: str, default: str) -> str:
+    """Načíta hodnotu zo st.secrets, potom z env. premennej, inak vráti default."""
+    try:
+        val = st.secrets.get(key)
+        if val:
+            return str(val)
+    except Exception:
+        pass
+    return os.environ.get(key, default)
+
+DODAVKY_SHEET_ID = _secret("DODAVKY_SHEET_ID", "1MB041dTwz-zfGg6u3wM1XpmrS_ynDe1J")
 
 DODAVKY_GIDS = {
     1:  "2041175941", 2:  "996148749", 3:  "1052948469", 4:  "1742234642",
@@ -80,17 +93,17 @@ RIADOK_PC_STAV_IDX = 36
 
 PREVADZKA_SHEETS = {
     2: {
-        "sheet_id":   "1FXmRJwlRr6N2u_aZzuzjnn0HHgNEBTem64B1phXl_NM",
+        "sheet_id":   _secret("PREVADZKA_2_SHEET_ID", "1FXmRJwlRr6N2u_aZzuzjnn0HHgNEBTem64B1phXl_NM"),
         "mesiac_gid": "1425398749",
         "denny_gid":  "759527346",
     },
     3: {
-        "sheet_id":   "1YSYltBW8uw3whOxNr3w8KLgvMkE-vqAV1cCeIn8Ymp0",
+        "sheet_id":   _secret("PREVADZKA_3_SHEET_ID", "1YSYltBW8uw3whOxNr3w8KLgvMkE-vqAV1cCeIn8Ymp0"),
         "mesiac_gid": "1081996655",
         "denny_gid":  "737601644",
     },
     4: {
-        "sheet_id":   "1E2gxstdMVwj5X__5qrPuRJgkV5GtqLK6BtmmCc3GE00",
+        "sheet_id":   _secret("PREVADZKA_4_SHEET_ID", "1E2gxstdMVwj5X__5qrPuRJgkV5GtqLK6BtmmCc3GE00"),
         "mesiac_gid": "737601644",
         "denny_gid":  None,
     },
@@ -131,9 +144,13 @@ def sum_column_do_dna(df: pd.DataFrame, col_idx: int, den: int) -> float:
 def nacitaj_dodavky_stiepky(mesiac: int, den: int) -> dict:
     vysledok = {"bodos": 0.0, "hbp_drevo": 0.0, "recyklacia": 0.0, "jankula": 0.0, "pociatocny_stav": 800.0}
     gid = DODAVKY_GIDS.get(mesiac)
-    if not gid: return vysledok
+    if not gid:
+        st.warning(f"⚠️ Dodávky štiepky: mesiac {mesiac} nie je nakonfigurovaný. Používajú sa predvolené hodnoty.")
+        return vysledok
     df = nacitaj_gs(DODAVKY_SHEET_ID, gid)
-    if df is None: return vysledok
+    if df is None:
+        st.warning("⚠️ Dodávky štiepky: dáta sa nepodarilo načítať z Google Sheets. Zobrazené hodnoty môžu byť nepresné.")
+        return vysledok
 
     pc_stav = safe_float(df, RIADOK_PC_STAV_IDX, COL_PC_STAV)
     if pc_stav is not None: vysledok["pociatocny_stav"] = pc_stav
@@ -219,15 +236,10 @@ def graf_do_pamate(fig):
     buf.seek(0)
     return buf
 
-def create_bar_chart(vyroba, priem_teplota, teplota_k6, teplota_k7):
-    vyroba_num = float(vyroba.split()[0].replace(',', '.'))
-    priem_teplota_num = float(priem_teplota.split()[0].replace(',', '.'))
-    teplota_k6_num = float(teplota_k6.split()[0].replace(',', '.'))
-    teplota_k7_num = float(teplota_k7.split()[0].replace(',', '.'))
-
+def create_bar_chart(vyroba: float, priem_teplota: float, teplota_k6: float, teplota_k7: float):
     fig, ax = plt.subplots(figsize=(8, 4))
     bars = ax.bar(['Výroba\n(MWh)', 'Priem. teplota\n(°C)', 'Teplota K6\n(°C)', 'Teplota K7\n(°C)'],
-                  [vyroba_num, priem_teplota_num, teplota_k6_num, teplota_k7_num],
+                  [vyroba, priem_teplota, teplota_k6, teplota_k7],
                   color=['#8CC63F', '#2B2B2B', '#5A5A5A', '#7A7A7A'])
     
     for bar in bars:
@@ -554,7 +566,7 @@ if st.button("🚀 Generuj report", type="primary"):
         priem_vykon_k7 = sum(prev_h_k7) / len(prev_h_k7) if prev_h_k7 else 0.0
         
         pocet_h_k6, pocet_h_k7 = len(prev_h_k6), len(prev_h_k7)
-        priem_vykon_spolu = ((priem_vykon_k6 * pocet_h_k6 + priem_vykon_k7 * pocet_h_k7) / max(pocet_h_k6, pocet_h_k7)) if (pocet_h_k6 + pocet_h_k7 > 0) else 0.0
+        priem_vykon_spolu = ((priem_vykon_k6 * pocet_h_k6 + priem_vykon_k7 * pocet_h_k7) / (pocet_h_k6 + pocet_h_k7)) if (pocet_h_k6 + pocet_h_k7 > 0) else 0.0
 
         def fmt(val, jednotka=""): return str(round(val, 2)).replace('.', ',') + (f" {jednotka}" if jednotka else "")
 
@@ -619,8 +631,8 @@ if st.button("🚀 Generuj report", type="primary"):
     st.markdown(html_stiepka_info, unsafe_allow_html=True)
 
     st.markdown("### Prevádzkové hodnoty")
-    fig_prevadzka = create_bar_chart(fmt(prev["vyroba_val"], "MWh"), fmt(prev["priem_teplota_val"], "°C"), 
-                                     fmt(prev["teplota_k6_val"], "°C"), fmt(prev["teplota_k7_val"], "°C"))
+    fig_prevadzka = create_bar_chart(prev["vyroba_val"], prev["priem_teplota_val"],
+                                     prev["teplota_k6_val"], prev["teplota_k7_val"])
     st.pyplot(fig_prevadzka, use_container_width=True)
     st.download_button(
         label="💾 Stiahnuť graf prevádzkových hodnôt",
