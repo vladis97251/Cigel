@@ -31,8 +31,12 @@ try:
     pdfmetrics.registerFont(TTFont(_FONT_NAME, "DejaVuSans.ttf"))
     pdfmetrics.registerFont(TTFont(_FONT_NAME_BOLD, "DejaVuSans-Bold.ttf"))
 except Exception:
-    pdfmetrics.registerFont(TTFont(_FONT_NAME, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
-    pdfmetrics.registerFont(TTFont(_FONT_NAME_BOLD, "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"))
+    try:
+        pdfmetrics.registerFont(TTFont(_FONT_NAME, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
+        pdfmetrics.registerFont(TTFont(_FONT_NAME_BOLD, "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"))
+    except Exception as _font_err:
+        st.error(f"❌ Nepodarilo sa načítať font DejaVuSans: {_font_err}\n\nUisti sa, že DejaVuSans.ttf je dostupný.")
+        st.stop()
 
 # ════════════════════════════════════════════════════════════════
 # LOGO – načítanie a base64 pre HTML
@@ -226,6 +230,9 @@ def nacitaj_prevadzkove_udaje(mesiac: int, den: int) -> dict | None:
     udaje["hours_data_k6"] = hours_data_k6
     udaje["hours_data_k7"] = hours_data_k7
     return udaje
+
+def fmt(val, jednotka=""):
+    return str(round(val, 2)).replace('.', ',') + (f" {jednotka}" if jednotka else "")
 
 def vypocitaj_vydrz_zasoby(pociatocny_stav, spotreba_doteraz, aktualna_denna_spotreba, aktualny_datum):
     zostatok = pociatocny_stav - spotreba_doteraz
@@ -548,7 +555,8 @@ if st.button("🚀 Generuj report", type="primary"):
         prev = nacitaj_prevadzkove_udaje(mesiac, den)
 
         if prev is None:
-            st.error(f"Mesiac {mesiac} nie je nakonfigurovaný. Doplň údaje do kódu.")
+            st.error(f"❌ Mesiac {mesiac} nie je nakonfigurovaný v `PREVADZKA_SHEETS`. "
+                     f"Doplň `sheet_id` a GIDs pre tento mesiac do konfigurácie.")
             st.stop()
 
         celkove_dodavky = sum([dodavky["bodos"], dodavky["hbp_drevo"], dodavky["recyklacia"], dodavky["jankula"]])
@@ -574,10 +582,8 @@ if st.button("🚀 Generuj report", type="primary"):
         pocet_h_k6, pocet_h_k7 = len(prev_h_k6), len(prev_h_k7)
         priem_vykon_spolu = ((priem_vykon_k6 * pocet_h_k6 + priem_vykon_k7 * pocet_h_k7) / (pocet_h_k6 + pocet_h_k7)) if (pocet_h_k6 + pocet_h_k7 > 0) else 0.0
 
-        def fmt(val, jednotka=""): return str(round(val, 2)).replace('.', ',') + (f" {jednotka}" if jednotka else "")
-
         # ── HTML e-mail s logom ──
-        logo_b64 = _get_logo_base64()
+        logo_b64 = logo_b64_header
         logo_html = (
             f"<img src='data:image/jpeg;base64,{logo_b64}' "
             f"style='height:40px; margin-bottom:8px;' alt='Handlovská Energetika'/>"
