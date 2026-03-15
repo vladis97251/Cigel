@@ -76,34 +76,44 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 def _secret(key: str) -> str:
     """Načíta hodnotu zo st.secrets alebo z env. premennej. Ak chýba, vyhodí chybu."""
     try:
-        val = st.secrets.get(key)
-        if val:
-            return str(val)
-    except Exception:
+        val = st.secrets[key]
+        if val is not None and str(val).strip():
+            return str(val).strip()
+    except KeyError:
         pass
+    except Exception as _e:
+        st.warning(f"⚠️ Chyba pri čítaní secrets['{key}']: {_e}")
     val = os.environ.get(key)
-    if val:
-        return val
-    st.error(f"❌ Chýba povinná konfigurácia: `{key}`\n\n"
-             f"Nastav ju v `.streamlit/secrets.toml` alebo ako env. premennú.\n"
-             f"Šablóna: `.streamlit/secrets.toml.example`")
+    if val and val.strip():
+        return val.strip()
+    st.error(
+        f"❌ Chýba povinná konfigurácia: `{key}`\n\n"
+        f"V Streamlit Cloud Secrets (Settings → Secrets) pridaj:\n"
+        f"```\n{key} = \"sem_vloz_id\"\n```\n"
+        f"Dostupné kľúče v secrets: `{list(st.secrets.keys()) if hasattr(st, 'secrets') else 'N/A'}`"
+    )
     st.stop()
 
 def _secret_nested(section: str, key: str) -> str:
     """Načíta hodnotu z nested sekcie st.secrets (napr. [prevadzka_2] → sheet_id)."""
     try:
-        val = st.secrets.get(section, {}).get(key)
-        if val:
-            return str(val)
-    except Exception:
+        sec = st.secrets[section]
+        val = sec[key]
+        if val is not None and str(val).strip():
+            return str(val).strip()
+    except KeyError:
         pass
+    except Exception as _e:
+        st.warning(f"⚠️ Chyba pri čítaní secrets['{section}']['{key}']: {_e}")
     env_key = f"{section.upper()}_{key.upper()}"
     val = os.environ.get(env_key)
-    if val:
-        return val
-    st.error(f"❌ Chýba povinná konfigurácia: sekcia `[{section}]`, kľúč `{key}`\n\n"
-             f"Nastav ju v `.streamlit/secrets.toml`:\n"
-             f"```\n[{section}]\n{key} = \"...\"\n```")
+    if val and val.strip():
+        return val.strip()
+    st.error(
+        f"❌ Chýba povinná konfigurácia: sekcia `[{section}]`, kľúč `{key}`\n\n"
+        f"V Streamlit Cloud Secrets pridaj:\n"
+        f"```\n[{section}]\n{key} = \"sem_vloz_id\"\n```"
+    )
     st.stop()
 
 DODAVKY_SHEET_ID = _secret("DODAVKY_SHEET_ID")
