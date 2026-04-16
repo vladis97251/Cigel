@@ -147,6 +147,46 @@ PREVADZKA_SHEETS = {
         "mesiac_gid": "737601644",
         "denny_gid":  None,
     },
+    5: {
+        "sheet_id":   _secret_nested("prevadzka_5", "sheet_id"),
+        "mesiac_gid": "1081996655",
+        "denny_gid":  "737601644",
+    },
+    6: {
+        "sheet_id":   _secret_nested("prevadzka_6", "sheet_id"),
+        "mesiac_gid": "1081996655",
+        "denny_gid":  "737601644",
+    },
+    7: {
+        "sheet_id":   _secret_nested("prevadzka_7", "sheet_id"),
+        "mesiac_gid": "1081996655",
+        "denny_gid":  "737601644",
+    },
+    8: {
+        "sheet_id":   _secret_nested("prevadzka_8", "sheet_id"),
+        "mesiac_gid": "1081996655",
+        "denny_gid":  "737601644",
+    },
+    9: {
+        "sheet_id":   _secret_nested("prevadzka_9", "sheet_id"),
+        "mesiac_gid": "1081996655",
+        "denny_gid":  "737601644",
+    },
+    10: {
+        "sheet_id":   _secret_nested("prevadzka_10", "sheet_id"),
+        "mesiac_gid": "1081996655",
+        "denny_gid":  "737601644",
+    },
+    11: {
+        "sheet_id":   _secret_nested("prevadzka_11", "sheet_id"),
+        "mesiac_gid": "1081996655",
+        "denny_gid":  "737601644",
+    },
+    12: {
+        "sheet_id":   _secret_nested("prevadzka_12", "sheet_id"),
+        "mesiac_gid": "1081996655",
+        "denny_gid":  "737601644",
+    },
 }
 
 MC_VYROBA = 17; MC_STIEPKA = 9; MC_T_VYSTUP = 10; MC_T_VRATNA = 11
