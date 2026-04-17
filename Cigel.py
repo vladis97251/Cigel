@@ -208,7 +208,7 @@ def nacitaj_prevadzkove_udaje(mesiac: int, den: int) -> dict | None:
     df_m = nacitaj_gs(cfg["sheet_id"], cfg["mesiac_gid"])
     if df_m is None: return None
 
-    ci = den + 5   # pandas index: deň d → riadok d+5 (GSheets CSV má 1 extra riadok navyše na vrchu)
+    ci = den + 4   # pandas index (cielovy_riadok = den + 5, Excel)
     udaje = {}
     
     def get_m(col_idx):
@@ -223,7 +223,7 @@ def nacitaj_prevadzkove_udaje(mesiac: int, den: int) -> dict | None:
     udaje["priem_prietok_val"] = get_m(MC_PRIETOK)
 
     monthly_sum, stiepka_monthly_sum = 0.0, 0.0
-    for row_idx in range(6, ci + 1):   # deň 1..deň d → pandas 6..ci (posun +1 kvôli GSheets CSV)
+    for row_idx in range(5, ci + 1):   # Excel riadky 6..cielovy_riadok → pandas 5..ci
         v_vyr = safe_float(df_m, row_idx, MC_VYROBA)
         if v_vyr and v_vyr > 0: monthly_sum += v_vyr
         v_st = safe_float(df_m, row_idx, MC_STIEPKA)
@@ -236,20 +236,20 @@ def nacitaj_prevadzkove_udaje(mesiac: int, den: int) -> dict | None:
     if not aktualna or aktualna <= 0:
         aktualna = 0.0
         for prev_day in range(1, 5):
-            if ci - prev_day >= 6:
+            if ci - prev_day >= 5:
                 prev_val = safe_float(df_m, ci - prev_day, MC_STIEPKA)
                 if prev_val and prev_val > 0:
                     aktualna = prev_val
                     break
-        if aktualna == 0.0 and (ci - 5) > 0:
-            aktualna = stiepka_monthly_sum / (ci - 5)
+        if aktualna == 0.0 and (ci - 4) > 0:
+            aktualna = stiepka_monthly_sum / (ci - 4)
     udaje["aktualna_denna_spotreba"] = aktualna
 
     hours_data_k6, hours_data_k7 = [0.0] * 24, [0.0] * 24
     if cfg.get("denny_gid"):
         df_d = nacitaj_gs(cfg["sheet_id"], cfg["denny_gid"])
         if df_d is not None:
-            start_idx = 6 + (den - 1) * 35   # posun +1 kvôli GSheets CSV (extra riadok na vrchu)
+            start_idx = 5 + (den - 1) * 35   # pandas index (Excel row = 6 + (den-1)*35)
             end_idx = start_idx + 24
             def process_hourly(col_idx):
                 vals = [safe_float(df_d, ri, col_idx) or 0.0 for ri in range(start_idx, end_idx)]
